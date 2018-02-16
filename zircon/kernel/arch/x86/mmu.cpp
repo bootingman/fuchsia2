@@ -49,8 +49,12 @@ int g_enable_isolation = -1;
 /* True if the system supports 1GB pages */
 static bool supports_huge_pages = false;
 
-/* top level kernel page tables, initialized in start.S */
-volatile pt_entry_t pml4[NO_OF_PT_ENTRIES] __ALIGNED(PAGE_SIZE);
+/* top level kernel page tables, initialized in start.S
+ * Note that pml4 is 8K aligned rather than 4K aligned, to simplify TLB
+ * invalidation handling for PTI.  If we did not 8K align it, we would need to
+ * special-case the kernel PML4 for TLB invalidation operations.
+ * */
+volatile pt_entry_t pml4[NO_OF_PT_ENTRIES] __ALIGNED(2 * PAGE_SIZE);
 volatile pt_entry_t pdp[NO_OF_PT_ENTRIES] __ALIGNED(PAGE_SIZE); /* temporary */
 volatile pt_entry_t pte[NO_OF_PT_ENTRIES] __ALIGNED(PAGE_SIZE);
 
@@ -171,6 +175,11 @@ static void TlbInvalidatePage_task(void* raw_context) {
     kcounter_add(tlb_invalidations_received, 1);
 
     ulong cr3 = x86_get_cr3();
+    if (g_enable_isolation == 1) {
+        // Mask out the kPML4 bit, so that we will invalidate from both the
+        // kPML4 and the uPML4.
+        cr3 &= ~X86PageTableMmu::kUserPml4Bit;
+    }
     if (context->target_cr3 != cr3 && !context->pending->contains_global) {
         /* This invalidation doesn't apply to this CPU, ignore it */
         return;
@@ -394,6 +403,18 @@ uint X86PageTableMmu::pt_flags_to_mmu_flags(PtFlags flags, PageTableLevel level)
     return mmu_flags;
 }
 
+void X86PageTableMmu::Pml4EChanged(size_t idx) {
+    if (!x86_kpti_is_enabled()) {
+        return;
+    }
+
+    // Check if the modified entry corresponds to the userspace entries shared
+    // between the two PML4s, and if so, mirror the change.
+    if (idx < NO_OF_PT_ENTRIES / 2) {
+        virt_[NO_OF_PT_ENTRIES + idx] = virt_[idx];
+    }
+}
+
 bool X86PageTableEpt::allowed_flags(uint flags) {
     if (!(flags & ARCH_MMU_FLAG_PERM_READ)) {
         return false;
@@ -589,10 +610,25 @@ zx_status_t X86PageTableMmu::InitKernel(void* ctx) TA_NO_THREAD_SAFETY_ANALYSIS 
 }
 
 zx_status_t X86PageTableMmu::AliasKernelMappings() {
-    // Copy the kernel portion of it from the master kernel pt.
+    // Copy the kernel portion of it from the master kernel pt.  Note that if
+    // PTI is enabled, this is only copied to the kPML4.
     memcpy(virt_ + NO_OF_PT_ENTRIES / 2,
            const_cast<pt_entry_t*>(&KERNEL_PT[NO_OF_PT_ENTRIES / 2]),
            sizeof(pt_entry_t) * NO_OF_PT_ENTRIES / 2);
+
+    DEBUG_ASSERT(g_enable_isolation != -1);
+    if (x86_kpti_is_enabled()) {
+        // TODO(teisenbe): Remove this copy of the kernel mappings so we can
+        // lock down which entries are mapped in the uPML4.
+        memcpy(virt_ + NO_OF_PT_ENTRIES + NO_OF_PT_ENTRIES / 2,
+               const_cast<pt_entry_t*>(&KERNEL_PT[NO_OF_PT_ENTRIES / 2]),
+               sizeof(pt_entry_t) * NO_OF_PT_ENTRIES / 2);
+
+        // If PTI is enabled, the uPML4 needs enough mappings to let the kernel swap
+        // to the kPML4.
+        // TODO(teisenbe): Copy those over
+    }
+
     return ZX_OK;
 }
 
@@ -634,11 +670,6 @@ zx_status_t X86ArchVmAspace::Init(vaddr_t base, size_t size, uint mmu_flags) {
         pt_ = mmu;
 
         zx_status_t status = mmu->Init(this);
-        if (status != ZX_OK) {
-            return status;
-        }
-
-        status = mmu->AliasKernelMappings();
         if (status != ZX_OK) {
             return status;
         }
@@ -756,6 +787,22 @@ void x86_mmu_percpu_init(void) {
     uint64_t efer_msr = read_msr(X86_MSR_IA32_EFER);
     efer_msr |= X86_EFER_NXE;
     write_msr(X86_MSR_IA32_EFER, efer_msr);
+}
+
+extern "C" {
+
+// Patch out the KPTI CR3 switches if isolation is disabled
+void x86_kpti_codepatch(const CodePatchInfo* patch) {
+    g_enable_isolation = cmdline_get_bool("kernel.pti.enable", true);
+    printf("Kernel PTI %s\n", g_enable_isolation ? "enabled" : "disabled");
+
+    DEBUG_ASSERT(g_enable_isolation != -1);
+    static const uint8_t kNopInstruction = 0x90;
+    if (!x86_kpti_is_enabled()) {
+        memset(patch->dest_addr, kNopInstruction, patch->dest_size);
+    }
+}
+
 }
 
 X86ArchVmAspace::~X86ArchVmAspace() {
