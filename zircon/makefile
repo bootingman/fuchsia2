@@ -9,6 +9,7 @@ LKMAKEROOT := .
 BUILDROOT ?= .
 DEFAULT_PROJECT ?= x64
 TOOLCHAIN_PREFIX ?=
+EXTERNAL_KERNEL_DEFINES := ENABLE_KERNEL_LL_DEBUG=1
 
 ENABLE_BUILD_SYSROOT ?= true
 # if true, $BUILDDIR/sysroot/{lib,include,...} will be populated with

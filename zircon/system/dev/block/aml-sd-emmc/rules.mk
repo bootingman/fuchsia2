@@ -11,7 +11,14 @@ MODULE_TYPE := driver
 MODULE_SRCS += \
     $(LOCAL_DIR)/aml-sd-emmc.cpp
 
-MODULE_STATIC_LIBS := system/ulib/ddk system/ulib/sync
+MODULE_STATIC_LIBS := \
+	system/dev/lib/mmio \
+	system/ulib/ddk \
+	system/ulib/ddktl \
+	system/ulib/fbl \
+	system/ulib/sync \
+	system/ulib/zx \
+   system/ulib/zxcpp \
 
 MODULE_LIBS := system/ulib/driver system/ulib/zircon system/ulib/c
 
@@ -20,8 +27,10 @@ MODULE_HEADER_DEPS := $(LOCAL_DIR) system/dev/lib/amlogic
 MODULE_BANJO_LIBS := \
     system/banjo/ddk-protocol-block \
     system/banjo/ddk-protocol-gpio \
-    system/banjo/ddk-protocol-platform-bus \
+	 system/banjo/ddk-protocol-clk \
+	 system/banjo/ddk-protocol-i2c \
+	 system/banjo/ddk-protocol-platform-bus \
     system/banjo/ddk-protocol-platform-device \
-    system/banjo/ddk-protocol-sdmmc \
+	 system/banjo/ddk-protocol-sdmmc \
 
 include make/module.mk

@@ -301,10 +301,12 @@ static zx_status_t crashlog_to_vmo(fbl::RefPtr<VmObject>* out) {
 
 static zx_status_t attempt_userboot() {
     size_t rsize;
+    dprintf(INFO, "userboot: MYDEBUG: attempt_userboot START\n");
     void* rbase = platform_get_ramdisk(&rsize);
     if (rbase)
         dprintf(INFO, "userboot: ramdisk %#15zx @ %p\n", rsize, rbase);
 
+    dprintf(INFO, "userboot: MYDEBUG: attempt_userboot GOT RAMDISK\n");
     fbl::RefPtr<VmObject> stack_vmo;
     zx_status_t status = VmObjectPaged::Create(PMM_ALLOC_FLAG_ANY, 0u, stack_size, &stack_vmo);
     if (status != ZX_OK)
@@ -329,6 +331,7 @@ static zx_status_t attempt_userboot() {
     if (!msg)
         return ZX_ERR_NO_MEMORY;
 
+    dprintf(INFO, "userboot: MYDEBUG: attempt_userboot PREPARED BOOTSTRAP MESSAGE\n");
     Handle** const handles = msg->mutable_handles();
     DEBUG_ASSERT(msg->num_handles() == BOOTSTRAP_HANDLES);
     status = get_vmo_handle(rootfs_vmo, false, nullptr,
@@ -345,6 +348,7 @@ static zx_status_t attempt_userboot() {
 
     if (status == ZX_OK)
         status = get_job_handle(&handles[BOOTSTRAP_JOB]);
+    dprintf(INFO, "userboot: MYDEBUG: attempt_userboot GOT BOOTSTRAP JOB HANDLE\n");
 
 #if ENABLE_ENTROPY_COLLECTOR_TEST
     if (status == ZX_OK) {
@@ -464,12 +468,15 @@ static zx_status_t attempt_userboot() {
         printf("userboot: failed to start initial thread: %d\n", status);
         return status;
     }
+    dprintf(INFO, "userboot: MYDEBUG: attempt_userboot STOP\n");
 
     return ZX_OK;
 }
 
 void userboot_init(uint level) {
+    dprintf(INFO, "userboot: MYDEBUG: userboot_init START\n");
     attempt_userboot();
+    dprintf(INFO, "userboot: MYDEBUG: userboot_init STOP\n");
 }
 
 LK_INIT_HOOK(userboot, userboot_init, LK_INIT_LEVEL_USER);

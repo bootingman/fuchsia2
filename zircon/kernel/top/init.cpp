@@ -82,7 +82,9 @@ void lk_init_level(enum lk_init_flags required_flag, uint start_level, uint stop
             }
         }
 
+        printf("lk_init_level: MYDEBUG: Calling hook %s\n", found->name);
         found->hook(found->level);
+        printf("lk_init_level: MYDEBUG: hook %s DONE \n", found->name);
         last_called_level = found->level;
         last = found;
     }
