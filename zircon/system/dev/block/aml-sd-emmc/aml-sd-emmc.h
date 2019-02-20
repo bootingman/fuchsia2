@@ -55,12 +55,12 @@ public:
     zx_status_t SdmmcRequest(sdmmc_req_t* req);
 
 private:
-    void aml_sd_emmc_dump_regs() const;
-    void aml_sd_emmc_dump_status(uint32_t status) const;
-    void aml_sd_emmc_dump_cfg(uint32_t config) const;
-    void aml_sd_emmc_dump_clock(uint32_t clock) const;
-    void aml_sd_emmc_dump_desc_cmd_cfg(uint32_t cmd_desc) const;
-    uint32_t get_clk_freq(uint32_t clk_src) const;
+    void DumpRegs() const;
+    void DumpSdmmcStatus(uint32_t status) const;
+    void DumpSdmmcCfg(uint32_t config) const;
+    void DumpSdmmcClock(uint32_t clock) const;
+    void DumpSdmmcCmdCfg(uint32_t cmd_desc) const;
+    uint32_t GetClkFreq(uint32_t clk_src) const;
     zx_status_t aml_sd_emmc_do_tuning_transfer(uint8_t* tuning_res,
                                                uint16_t blk_pattern_size,
                                                uint32_t tuning_cmd_idx);
@@ -72,19 +72,19 @@ private:
                                                          uint32_t cur_clk_div, int* best_start,
                                                          uint32_t* best_size,
                                                          uint32_t tuning_cmd_idx);
-    void aml_sd_emmc_init_regs();
-    void aml_sd_emmc_setup_cmd_desc(sdmmc_req_t* req,
+    void ConfigureDefaultRegs();
+    void SetupCmdDesc(sdmmc_req_t* req,
                                     aml_sd_emmc_desc_t** out_desc);
-    zx_status_t aml_sd_emmc_setup_data_descs_dma(sdmmc_req_t* req,
+    zx_status_t SetupDataDescsDma(sdmmc_req_t* req,
                                                  aml_sd_emmc_desc_t* cur_desc,
                                                  aml_sd_emmc_desc_t** last_desc);
-    zx_status_t aml_sd_emmc_setup_data_descs_pio(sdmmc_req_t* req,
+    zx_status_t SetupDataDescsPio(sdmmc_req_t* req,
                                                  aml_sd_emmc_desc_t* desc,
                                                  aml_sd_emmc_desc_t** last_desc);
-    zx_status_t aml_sd_emmc_setup_data_descs(sdmmc_req_t *req,
+    zx_status_t SetupDataDescs(sdmmc_req_t *req,
                                              aml_sd_emmc_desc_t *desc,
                                              aml_sd_emmc_desc_t **last_desc);
-    zx_status_t aml_sd_emmc_finish_req(sdmmc_req_t* req);
+    zx_status_t FinishReq(sdmmc_req_t* req);
     int IrqThread();
     zx_status_t Bind();
     zx_status_t Init();
@@ -92,21 +92,16 @@ private:
     ddk::PDev pdev_;
     zx::bti bti_;
 
-    //std::optional<ddk::MmioBuffer> mmio_;
     ddk::MmioBuffer mmio_;
     ddk::MmioPinnedBuffer pinned_mmio_;
     const ddk::GpioProtocolClient reset_gpio_;
     zx::interrupt irq_;
     const aml_sd_emmc_config_t board_config_;
-    mmio_buffer_t mymmio_;
 
     thrd_t irq_thread_;
     sdmmc_host_info_t dev_info_;
     io_buffer_t descs_buffer_;
     sync_completion_t req_completion_;
-    // virt address of mmio_
-    aml_sd_emmc_regs_t* regs_;
-    // Held when I/O submit/complete is in progress.
     mtx_t mtx_;
     // cur pending req
     sdmmc_req_t* cur_req_ TA_GUARDED(mtx_);

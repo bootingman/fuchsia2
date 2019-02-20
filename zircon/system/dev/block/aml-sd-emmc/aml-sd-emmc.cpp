@@ -57,16 +57,16 @@ static inline uint8_t log2_ceil(uint16_t blk_sz) {
 
 namespace sdmmc {
 
-void AmlSdEmmc::aml_sd_emmc_dump_regs() const {
+void AmlSdEmmc::DumpRegs() const {
     AML_SD_EMMC_TRACE("sd_emmc_clock : 0x%x\n", mmio_.Read32(AML_SD_EMMC_CLOCK_OFFSET));
-    aml_sd_emmc_dump_clock(mmio_.Read32(AML_SD_EMMC_CLOCK_OFFSET));
+    DumpSdmmcClock(mmio_.Read32(AML_SD_EMMC_CLOCK_OFFSET));
     AML_SD_EMMC_TRACE("sd_emmc_delay1 : 0x%x\n", mmio_.Read32(AML_SD_EMMC_DELAY1_OFFSET));
     AML_SD_EMMC_TRACE("sd_emmc_delay2 : 0x%x\n", mmio_.Read32(AML_SD_EMMC_DELAY2_OFFSET));
     AML_SD_EMMC_TRACE("sd_emmc_adjust : 0x%x\n", mmio_.Read32(AML_SD_EMMC_ADJUST_OFFSET));
     AML_SD_EMMC_TRACE("sd_emmc_calout : 0x%x\n", mmio_.Read32(AML_SD_EMMC_CALOUT_OFFSET));
     AML_SD_EMMC_TRACE("sd_emmc_start : 0x%x\n", mmio_.Read32(AML_SD_EMMC_START_OFFSET));
     AML_SD_EMMC_TRACE("sd_emmc_cfg : 0x%x\n", mmio_.Read32(AML_SD_EMMC_CFG_OFFSET));
-    aml_sd_emmc_dump_cfg(mmio_.Read32(AML_SD_EMMC_CFG_OFFSET));
+    DumpSdmmcCfg(mmio_.Read32(AML_SD_EMMC_CFG_OFFSET));
     AML_SD_EMMC_TRACE("sd_emmc_status : 0x%x\n", mmio_.Read32(AML_SD_EMMC_STATUS_OFFSET));
     AML_SD_EMMC_TRACE("sd_emmc_irq_en : 0x%x\n", mmio_.Read32(AML_SD_EMMC_IRQ_EN_OFFSET));
     AML_SD_EMMC_TRACE("sd_emmc_cmd_cfg : 0x%x\n", mmio_.Read32(AML_SD_EMMC_CMD_CFG_OFFSET));
@@ -89,7 +89,7 @@ void AmlSdEmmc::aml_sd_emmc_dump_regs() const {
     AML_SD_EMMC_TRACE("sd_emmc_txd : 0x%x\n", mmio_.Read32(AML_SD_EMMC_TXD_OFFSET));
 }
 
-void AmlSdEmmc::aml_sd_emmc_dump_status(uint32_t status) const {
+void AmlSdEmmc::DumpSdmmcStatus(uint32_t status) const {
     uint32_t rxd_err = get_bits(status, AML_SD_EMMC_STATUS_RXD_ERR_MASK,
                                 AML_SD_EMMC_STATUS_RXD_ERR_LOC);
     AML_SD_EMMC_TRACE("Dumping sd_emmc_status 0x%0x\n", status);
@@ -112,7 +112,7 @@ void AmlSdEmmc::aml_sd_emmc_dump_status(uint32_t status) const {
     AML_SD_EMMC_TRACE("    CORE_RDY: %d\n", get_bit(status, AML_SD_EMMC_STATUS_BUS_CORE_BUSY));
 }
 
-void AmlSdEmmc::aml_sd_emmc_dump_cfg(uint32_t config) const {
+void AmlSdEmmc::DumpSdmmcCfg(uint32_t config) const {
     AML_SD_EMMC_TRACE("Dumping sd_emmc_cfg 0x%0x\n", config);
     AML_SD_EMMC_TRACE("    BUS_WIDTH: %d\n", get_bits(config, AML_SD_EMMC_CFG_BUS_WIDTH_MASK,
                                                       AML_SD_EMMC_CFG_BUS_WIDTH_LOC));
@@ -122,7 +122,7 @@ void AmlSdEmmc::aml_sd_emmc_dump_cfg(uint32_t config) const {
                                                       AML_SD_EMMC_CFG_BL_LEN_LOC));
 }
 
-void AmlSdEmmc::aml_sd_emmc_dump_clock(uint32_t clock) const {
+void AmlSdEmmc::DumpSdmmcClock(uint32_t clock) const {
     AML_SD_EMMC_TRACE("Dumping clock 0x%0x\n", clock);
     AML_SD_EMMC_TRACE("   DIV: %d\n", get_bits(clock, AML_SD_EMMC_CLOCK_CFG_DIV_MASK,
                                                AML_SD_EMMC_CLOCK_CFG_DIV_LOC));
@@ -141,7 +141,7 @@ void AmlSdEmmc::aml_sd_emmc_dump_clock(uint32_t clock) const {
     AML_SD_EMMC_TRACE("   ALWAYS_ON: %d\n", get_bit(clock, AML_SD_EMMC_CLOCK_CFG_ALWAYS_ON));
 }
 
-void AmlSdEmmc::aml_sd_emmc_dump_desc_cmd_cfg(uint32_t cmd_desc) const {
+void AmlSdEmmc::DumpSdmmcCmdCfg(uint32_t cmd_desc) const {
     AML_SD_EMMC_TRACE("Dumping cmd_cfg 0x%0x\n", cmd_desc);
     AML_SD_EMMC_TRACE("   REQ_LEN: %d\n", get_bits(cmd_desc, AML_SD_EMMC_CMD_INFO_LEN_MASK,
                                                    AML_SD_EMMC_CMD_INFO_LEN_LOC));
@@ -399,7 +399,7 @@ void AmlSdEmmc::DdkRelease() {
     delete this;
 }
 
-uint32_t AmlSdEmmc::get_clk_freq(uint32_t clk_src) const {
+uint32_t AmlSdEmmc::GetClkFreq(uint32_t clk_src) const {
     if (clk_src == AML_SD_EMMC_FCLK_DIV2_SRC) {
         return AML_SD_EMMC_FCLK_DIV2_FREQ;
     }
@@ -460,7 +460,7 @@ zx_status_t AmlSdEmmc::SdmmcSetBusFreq(uint32_t freq) {
     return ZX_OK;
 }
 
-void AmlSdEmmc::aml_sd_emmc_init_regs() {
+void AmlSdEmmc::ConfigureDefaultRegs() {
     uint32_t config = 0;
     uint32_t clk_val = 0;
     update_bits(&clk_val, AML_SD_EMMC_CLOCK_CFG_CO_PHASE_MASK,
@@ -494,7 +494,7 @@ void AmlSdEmmc::SdmmcHwReset() {
         reset_gpio_.ConfigOut(1);
         usleep(10 * 1000);
    }
-   aml_sd_emmc_init_regs();
+   ConfigureDefaultRegs();
 }
 
 zx_status_t AmlSdEmmc::SdmmcSetTiming(sdmmc_timing_t timing) {
@@ -532,7 +532,7 @@ zx_status_t AmlSdEmmc::SdmmcSetSignalVoltage(sdmmc_voltage_t voltage) {
     return ZX_OK;
 }
 
-void AmlSdEmmc::aml_sd_emmc_setup_cmd_desc(sdmmc_req_t* req, aml_sd_emmc_desc_t** out_desc) {
+void AmlSdEmmc::SetupCmdDesc(sdmmc_req_t* req, aml_sd_emmc_desc_t** out_desc) {
     aml_sd_emmc_desc_t* desc;
     if (req->use_dma) {
         ZX_DEBUG_ASSERT((dev_info_.caps & SDMMC_HOST_CAP_ADMA2));
@@ -573,7 +573,7 @@ void AmlSdEmmc::aml_sd_emmc_setup_cmd_desc(sdmmc_req_t* req, aml_sd_emmc_desc_t*
     *out_desc = desc;
 }
 
-zx_status_t AmlSdEmmc::aml_sd_emmc_setup_data_descs_dma(sdmmc_req_t* req,
+zx_status_t AmlSdEmmc::SetupDataDescsDma(sdmmc_req_t* req,
                                                     aml_sd_emmc_desc_t* cur_desc,
                                                     aml_sd_emmc_desc_t** last_desc) {
     uint64_t req_len = req->blockcount * req->blocksize;
@@ -678,7 +678,7 @@ zx_status_t AmlSdEmmc::aml_sd_emmc_setup_data_descs_dma(sdmmc_req_t* req,
     return ZX_OK;
 }
 
-zx_status_t AmlSdEmmc::aml_sd_emmc_setup_data_descs_pio(sdmmc_req_t* req,
+zx_status_t AmlSdEmmc::SetupDataDescsPio(sdmmc_req_t* req,
                                                     aml_sd_emmc_desc_t* desc,
                                                     aml_sd_emmc_desc_t** last_desc) {
     zx_status_t status = ZX_OK;
@@ -728,7 +728,7 @@ zx_status_t AmlSdEmmc::aml_sd_emmc_setup_data_descs_pio(sdmmc_req_t* req,
     return status;
 }
 
-zx_status_t AmlSdEmmc::aml_sd_emmc_setup_data_descs(sdmmc_req_t *req,
+zx_status_t AmlSdEmmc::SetupDataDescs(sdmmc_req_t *req,
                                                 aml_sd_emmc_desc_t *desc,
                                                 aml_sd_emmc_desc_t **last_desc) {
     zx_status_t st = ZX_OK;
@@ -738,12 +738,12 @@ zx_status_t AmlSdEmmc::aml_sd_emmc_setup_data_descs(sdmmc_req_t *req,
     }
 
     if (req->use_dma) {
-        st = aml_sd_emmc_setup_data_descs_dma(req, desc, last_desc);
+        st = SetupDataDescsDma(req, desc, last_desc);
         if (st != ZX_OK) {
             return st;
         }
     } else {
-        st =  aml_sd_emmc_setup_data_descs_pio(req, desc, last_desc);
+        st =  SetupDataDescsPio(req, desc, last_desc);
         if (st != ZX_OK) {
             return st;
         }
@@ -762,7 +762,7 @@ zx_status_t AmlSdEmmc::aml_sd_emmc_setup_data_descs(sdmmc_req_t *req,
     return ZX_OK;
 }
 
-zx_status_t AmlSdEmmc::aml_sd_emmc_finish_req(sdmmc_req_t* req) {
+zx_status_t AmlSdEmmc::FinishReq(sdmmc_req_t* req) {
     zx_status_t st = ZX_OK;
     if (req->use_dma && req->pmt != ZX_HANDLE_INVALID) {
         /*
@@ -798,10 +798,10 @@ zx_status_t AmlSdEmmc::SdmmcRequest(sdmmc_req_t* req) {
     mmio_.Write32(start_reg, AML_SD_EMMC_START_OFFSET);
     aml_sd_emmc_desc_t *desc, *last_desc;
 
-    aml_sd_emmc_setup_cmd_desc(req, &desc);
+    SetupCmdDesc(req, &desc);
     last_desc = desc;
     if (req->cmd_flags & SDMMC_RESP_DATA_PRESENT) {
-        status = aml_sd_emmc_setup_data_descs(req, desc, &last_desc);
+        status = SetupDataDescs(req, desc, &last_desc);
         if (status != ZX_OK) {
             zxlogf(ERROR, "aml_sd_emmc_request: Failed to setup data descriptors\n");
             mtx_unlock(&mtx_);
@@ -836,7 +836,7 @@ zx_status_t AmlSdEmmc::SdmmcRequest(sdmmc_req_t* req) {
     mtx_unlock(&mtx_);
 
     sync_completion_wait(&req_completion_, ZX_TIME_INFINITE);
-    aml_sd_emmc_finish_req(req);
+    FinishReq(req);
     sync_completion_reset(&req_completion_);
     return req->status;
 }
