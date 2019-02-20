@@ -59,6 +59,39 @@ static inline bool get_bit(uint32_t x, uint32_t mask) {
     return (x & mask) ? 1 : 0;
 }
 
+#define AML_SD_EMMC_CLOCK_OFFSET                0x00
+#define AML_SD_EMMC_DELAY1_OFFSET               0x04
+#define AML_SD_EMMC_DELAY2_OFFSET               0x08
+#define AML_SD_EMMC_ADJUST_OFFSET               0x0c
+#define AML_SD_EMMC_CALOUT_OFFSET               0x10
+#define AML_SD_EMMC_CALOUTV2_OFFSET             0x14
+#define AML_SD_EMMC_CALOUTV2_OFFSET             0x14
+#define AML_SD_EMMC_START_OFFSET                0x40
+#define AML_SD_EMMC_CFG_OFFSET                  0x44
+#define AML_SD_EMMC_STATUS_OFFSET               0x48
+#define AML_SD_EMMC_IRQ_EN_OFFSET               0x4c
+#define AML_SD_EMMC_CMD_CFG_OFFSET              0x50
+#define AML_SD_EMMC_CMD_ARG_OFFSET              0x54
+#define AML_SD_EMMC_CMD_DAT_OFFSET              0x58
+#define AML_SD_EMMC_CMD_RSP_OFFSET              0x5c
+#define AML_SD_EMMC_CMD_RSP1_OFFSET             0x60
+#define AML_SD_EMMC_CMD_RSP2_OFFSET             0x64
+#define AML_SD_EMMC_CMD_RSP3_OFFSET             0x68
+#define AML_SD_EMMC_CMD_BUS_ERR_OFFSET          0x6c
+#define AML_SD_EMMC_CURR_CFG_OFFSET             0x70
+#define AML_SD_EMMC_CURR_ARG_OFFSET             0x74
+#define AML_SD_EMMC_CURR_DAT_OFFSET             0x78
+#define AML_SD_EMMC_CURR_RSP_OFFSET             0x7c
+#define AML_SD_EMMC_NXT_CFG_OFFSET              0x80
+#define AML_SD_EMMC_NXT_ARG_OFFSET              0x84
+#define AML_SD_EMMC_NXT_DAT_OFFSET              0x88
+#define AML_SD_EMMC_NXT_RSP_OFFSET              0x8c
+#define AML_SD_EMMC_RXD_OFFSET                  0x90
+#define AML_SD_EMMC_TXD_OFFSET                  0x94
+#define AML_SD_EMMC_SRAMDESC_OFFSET             0x200
+#define AML_SD_EMMC_PING_OFFSET                 0x400
+#define AML_SD_EMMC_PONG_OFFSET                 0x800
+
 typedef struct {
     volatile uint32_t sd_emmc_clock;            // 0x00
 #define AML_SD_EMMC_CLOCK_CFG_DIV_LOC           0
