@@ -277,134 +277,6 @@ int AmlSdEmmc::IrqThread() {
     return 0;
 }
 
-zx_status_t AmlSdEmmc::Init() {
-    dev_info_.caps = SDMMC_HOST_CAP_BUS_WIDTH_8 | SDMMC_HOST_CAP_VOLTAGE_330;
-    if (board_config_.supports_dma) {
-        dev_info_.caps |= SDMMC_HOST_CAP_ADMA2;
-        zx_status_t status = io_buffer_init(&descs_buffer_, bti_.get(),
-                                            AML_DMA_DESC_MAX_COUNT * sizeof(aml_sd_emmc_desc_t),
-                                            IO_BUFFER_RW | IO_BUFFER_CONTIG);
-        if (status != ZX_OK) {
-            zxlogf(ERROR, "AmlSdEmmc::Init: Failed to allocate dma descriptors\n");
-            return status;
-        }
-        dev_info_.max_transfer_size = AML_DMA_DESC_MAX_COUNT * PAGE_SIZE;
-    } else {
-        dev_info_.max_transfer_size = AML_SD_EMMC_MAX_PIO_DATA_SIZE;
-    }
-
-    dev_info_.max_transfer_size_non_dma = AML_SD_EMMC_MAX_PIO_DATA_SIZE;
-    max_freq_ = board_config_.max_freq;
-    min_freq_ = board_config_.min_freq;
-
-    // Init the Irq thread
-    auto cb = [](void* arg) -> int { return reinterpret_cast<AmlSdEmmc*>(arg)->IrqThread(); };
-    if (thrd_create_with_name(&irq_thread_, cb, this, "aml_sd_emmc_irq_thread") != thrd_success) {
-        zxlogf(ERROR, "AmlSdEmmc::Init: Failed to init irq thread\n");
-        return ZX_ERR_INTERNAL;
-    }
-
-    zxlogf(ERROR, "AmlSdEmmc::BIND: MINE INIT DONE\n");
-    sync_completion_reset(&req_completion_);
-    return ZX_OK;
-}
-
-zx_status_t AmlSdEmmc::Bind() {
-    zx_status_t status = DdkAdd("aml-sd-emmc");
-    if (status != ZX_OK) {
-        zxlogf(ERROR, "AmlSdEmmc::Bind: DdkAdd failed\n");
-    }
-
-    zxlogf(ERROR, "AmlSdEmmc::BIND: MINE BIND DONE\n");
-    return status;
-}
-
-zx_status_t AmlSdEmmc::Create(void* ctx, zx_device_t* parent) {
-    zx_status_t status = ZX_OK;
-
-    ddk::PDev pdev(parent);
-    if (!pdev.is_valid()) {
-        zxlogf(ERROR, "AmlSdEmmc::Create: Could not get pdev: %d\n", status);
-        return ZX_ERR_NO_RESOURCES;
-    }
-
-    zx::bti bti;
-    if ((status = pdev.GetBti(0, &bti)) != ZX_OK) {
-        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to get BTI: %d\n", status);
-        return status;
-    }
-
-    std::optional<ddk::MmioBuffer> mmio;
-    status = pdev.MapMmio(0, &mmio);
-    if (status != ZX_OK) {
-        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to get mmio: %d\n", status);
-        return status;
-    }
-
-    //Pin the mmio
-    std::optional<ddk::MmioPinnedBuffer> pinned_mmio;
-    status = mmio->Pin(bti, &pinned_mmio);
-    if (status != ZX_OK) {
-        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to pin mmio: %d\n", status);
-        return status;
-    }
-
-    // Populate board specific information
-    aml_sd_emmc_config_t config;
-    size_t actual;
-    status = device_get_metadata(parent, DEVICE_METADATA_PRIVATE, &config, sizeof(config), &actual);
-    if (status != ZX_OK || actual != sizeof(config)) {
-        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to get metadata: %d\n", status);
-        return status;
-    }
-
-    zx::interrupt irq;
-    if ((status = pdev.GetInterrupt(0, &irq)) != ZX_OK) {
-        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to get interrupt: %d\n", status);
-        return status;
-    }
-
-    ddk::GpioProtocolClient reset_gpio = pdev.GetGpio(0);
-    if (!reset_gpio.is_valid()) {
-        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to get GPIO\n");
-        return ZX_ERR_NO_RESOURCES;
-    }
-
-    auto dev = fbl::make_unique<AmlSdEmmc>(parent, pdev, std::move(bti), *std::move(mmio),
-                                           *std::move(pinned_mmio),
-                                           config, std::move(irq), reset_gpio);
-
-    if ((status = dev->Init()) != ZX_OK) {
-        return status;
-    }
-
-    if ((status = dev->Bind()) != ZX_OK) {
-        return status;
-    }
-
-    // devmgr is now in charge of the device.
-    __UNUSED auto* dummy = dev.release();
-    return ZX_OK;
-}
-
-
-void AmlSdEmmc::DdkUnbind() {
-    DdkRemove();
-}
-
-void AmlSdEmmc::DdkRelease() {
-    if (irq_thread_)
-        thrd_join(irq_thread_, NULL);
-    io_buffer_release(&descs_buffer_);
-    delete this;
-}
-
-uint32_t AmlSdEmmc::GetClkFreq(uint32_t clk_src) const {
-    if (clk_src == AML_SD_EMMC_FCLK_DIV2_SRC) {
-        return AML_SD_EMMC_FCLK_DIV2_FREQ;
-    }
-    return AML_SD_EMMC_CTS_OSCIN_CLK_FREQ;
-}
 
 zx_status_t AmlSdEmmc::SdmmcHostInfo(sdmmc_host_info_t* info) {
     memcpy(info, &dev_info_, sizeof(dev_info_));
@@ -1001,6 +873,127 @@ zx_status_t AmlSdEmmc::SdmmcPerformTuning(uint32_t tuning_cmd_idx) {
     adjust_reg &= ~AML_SD_EMMC_ADJUST_CALI_ENABLE;
     mmio_.Write32(adjust_reg, AML_SD_EMMC_ADJUST_OFFSET);
     return ZX_OK;
+}
+
+zx_status_t AmlSdEmmc::Init() {
+    dev_info_.caps = SDMMC_HOST_CAP_BUS_WIDTH_8 | SDMMC_HOST_CAP_VOLTAGE_330;
+    if (board_config_.supports_dma) {
+        dev_info_.caps |= SDMMC_HOST_CAP_ADMA2;
+        zx_status_t status = io_buffer_init(&descs_buffer_, bti_.get(),
+                                            AML_DMA_DESC_MAX_COUNT * sizeof(aml_sd_emmc_desc_t),
+                                            IO_BUFFER_RW | IO_BUFFER_CONTIG);
+        if (status != ZX_OK) {
+            zxlogf(ERROR, "AmlSdEmmc::Init: Failed to allocate dma descriptors\n");
+            return status;
+        }
+        dev_info_.max_transfer_size = AML_DMA_DESC_MAX_COUNT * PAGE_SIZE;
+    } else {
+        dev_info_.max_transfer_size = AML_SD_EMMC_MAX_PIO_DATA_SIZE;
+    }
+
+    dev_info_.max_transfer_size_non_dma = AML_SD_EMMC_MAX_PIO_DATA_SIZE;
+    max_freq_ = board_config_.max_freq;
+    min_freq_ = board_config_.min_freq;
+
+    // Init the Irq thread
+    auto cb = [](void* arg) -> int { return reinterpret_cast<AmlSdEmmc*>(arg)->IrqThread(); };
+    if (thrd_create_with_name(&irq_thread_, cb, this, "aml_sd_emmc_irq_thread") != thrd_success) {
+        zxlogf(ERROR, "AmlSdEmmc::Init: Failed to init irq thread\n");
+        return ZX_ERR_INTERNAL;
+    }
+
+    zxlogf(ERROR, "AmlSdEmmc::BIND: MINE INIT DONE\n");
+    sync_completion_reset(&req_completion_);
+    return ZX_OK;
+}
+
+zx_status_t AmlSdEmmc::Bind() {
+    zx_status_t status = DdkAdd("aml-sd-emmc");
+    if (status != ZX_OK) {
+        zxlogf(ERROR, "AmlSdEmmc::Bind: DdkAdd failed\n");
+    }
+
+    zxlogf(ERROR, "AmlSdEmmc::BIND: MINE BIND DONE\n");
+    return status;
+}
+
+zx_status_t AmlSdEmmc::Create(void* ctx, zx_device_t* parent) {
+    zx_status_t status = ZX_OK;
+
+    ddk::PDev pdev(parent);
+    if (!pdev.is_valid()) {
+        zxlogf(ERROR, "AmlSdEmmc::Create: Could not get pdev: %d\n", status);
+        return ZX_ERR_NO_RESOURCES;
+    }
+
+    zx::bti bti;
+    if ((status = pdev.GetBti(0, &bti)) != ZX_OK) {
+        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to get BTI: %d\n", status);
+        return status;
+    }
+
+    std::optional<ddk::MmioBuffer> mmio;
+    status = pdev.MapMmio(0, &mmio);
+    if (status != ZX_OK) {
+        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to get mmio: %d\n", status);
+        return status;
+    }
+
+    //Pin the mmio
+    std::optional<ddk::MmioPinnedBuffer> pinned_mmio;
+    status = mmio->Pin(bti, &pinned_mmio);
+    if (status != ZX_OK) {
+        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to pin mmio: %d\n", status);
+        return status;
+    }
+
+    // Populate board specific information
+    aml_sd_emmc_config_t config;
+    size_t actual;
+    status = device_get_metadata(parent, DEVICE_METADATA_PRIVATE, &config, sizeof(config), &actual);
+    if (status != ZX_OK || actual != sizeof(config)) {
+        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to get metadata: %d\n", status);
+        return status;
+    }
+
+    zx::interrupt irq;
+    if ((status = pdev.GetInterrupt(0, &irq)) != ZX_OK) {
+        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to get interrupt: %d\n", status);
+        return status;
+    }
+
+    ddk::GpioProtocolClient reset_gpio = pdev.GetGpio(0);
+    if (!reset_gpio.is_valid()) {
+        zxlogf(ERROR, "AmlSdEmmc::Create: Failed to get GPIO\n");
+        return ZX_ERR_NO_RESOURCES;
+    }
+
+    auto dev = fbl::make_unique<AmlSdEmmc>(parent, pdev, std::move(bti), *std::move(mmio),
+                                           *std::move(pinned_mmio),
+                                           config, std::move(irq), reset_gpio);
+
+    if ((status = dev->Init()) != ZX_OK) {
+        return status;
+    }
+
+    if ((status = dev->Bind()) != ZX_OK) {
+        return status;
+    }
+
+    // devmgr is now in charge of the device.
+    __UNUSED auto* dummy = dev.release();
+    return ZX_OK;
+}
+
+void AmlSdEmmc::DdkUnbind() {
+    DdkRemove();
+}
+
+void AmlSdEmmc::DdkRelease() {
+    if (irq_thread_)
+        thrd_join(irq_thread_, NULL);
+    io_buffer_release(&descs_buffer_);
+    delete this;
 }
 
 static zx_driver_ops_t aml_sd_emmc_driver_ops = []() {
