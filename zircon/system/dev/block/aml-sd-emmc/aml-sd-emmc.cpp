@@ -574,8 +574,8 @@ void AmlSdEmmc::SetupCmdDesc(sdmmc_req_t* req, aml_sd_emmc_desc_t** out_desc) {
 }
 
 zx_status_t AmlSdEmmc::SetupDataDescsDma(sdmmc_req_t* req,
-                                                    aml_sd_emmc_desc_t* cur_desc,
-                                                    aml_sd_emmc_desc_t** last_desc) {
+                                         aml_sd_emmc_desc_t* cur_desc,
+                                         aml_sd_emmc_desc_t** last_desc) {
     uint64_t req_len = req->blockcount * req->blocksize;
     bool is_read = req->cmd_flags & SDMMC_CMD_READ;
     uint64_t pagecount = ((req->buf_offset & PAGE_MASK) + req_len + PAGE_MASK) /
@@ -679,8 +679,8 @@ zx_status_t AmlSdEmmc::SetupDataDescsDma(sdmmc_req_t* req,
 }
 
 zx_status_t AmlSdEmmc::SetupDataDescsPio(sdmmc_req_t* req,
-                                                    aml_sd_emmc_desc_t* desc,
-                                                    aml_sd_emmc_desc_t** last_desc) {
+                                         aml_sd_emmc_desc_t* desc,
+                                         aml_sd_emmc_desc_t** last_desc) {
     zx_status_t status = ZX_OK;
     uint32_t length = req->blockcount * req->blocksize;
 
@@ -728,9 +728,8 @@ zx_status_t AmlSdEmmc::SetupDataDescsPio(sdmmc_req_t* req,
     return status;
 }
 
-zx_status_t AmlSdEmmc::SetupDataDescs(sdmmc_req_t *req,
-                                                aml_sd_emmc_desc_t *desc,
-                                                aml_sd_emmc_desc_t **last_desc) {
+zx_status_t AmlSdEmmc::SetupDataDescs(sdmmc_req_t *req, aml_sd_emmc_desc_t *desc,
+                                      aml_sd_emmc_desc_t **last_desc) {
     zx_status_t st = ZX_OK;
 
     if (!req->blocksize || req->blocksize > AML_SD_EMMC_MAX_BLK_SIZE) {
@@ -841,9 +840,8 @@ zx_status_t AmlSdEmmc::SdmmcRequest(sdmmc_req_t* req) {
     return req->status;
 }
 
-zx_status_t AmlSdEmmc::aml_sd_emmc_do_tuning_transfer(uint8_t* tuning_res,
-                                                  uint16_t blk_pattern_size,
-                                                  uint32_t tuning_cmd_idx) {
+zx_status_t AmlSdEmmc::TuningDoTransfer(uint8_t* tuning_res, uint16_t blk_pattern_size,
+                                        uint32_t tuning_cmd_idx) {
     sdmmc_req_t tuning_req = {};
     tuning_req.cmd_idx = tuning_cmd_idx;
     tuning_req.cmd_flags = MMC_SEND_TUNING_BLOCK_FLAGS;
@@ -857,9 +855,8 @@ zx_status_t AmlSdEmmc::aml_sd_emmc_do_tuning_transfer(uint8_t* tuning_res,
     return AmlSdEmmc::SdmmcRequest(&tuning_req);
 }
 
-bool AmlSdEmmc::aml_sd_emmc_tuning_test_delay(const uint8_t* blk_pattern,
-                                              uint16_t blk_pattern_size, uint32_t adj_delay,
-                                              uint32_t tuning_cmd_idx) {
+bool AmlSdEmmc::TuningTestDelay(const uint8_t* blk_pattern, uint16_t blk_pattern_size,
+                                uint32_t adj_delay, uint32_t tuning_cmd_idx) {
     uint32_t adjust_reg = mmio_.Read32(AML_SD_EMMC_ADJUST_OFFSET);
     update_bits(&adjust_reg, AML_SD_EMMC_ADJUST_ADJ_DELAY_MASK,
                 AML_SD_EMMC_ADJUST_ADJ_DELAY_LOC, adj_delay);
@@ -872,7 +869,7 @@ bool AmlSdEmmc::aml_sd_emmc_tuning_test_delay(const uint8_t* blk_pattern,
     size_t n;
     for (n = 0; n < AML_SD_EMMC_ADJ_DELAY_TEST_ATTEMPTS; n++) {
         uint8_t tuning_res[512] = {0};
-        status = aml_sd_emmc_do_tuning_transfer(tuning_res, blk_pattern_size, tuning_cmd_idx);
+        status = TuningDoTransfer(tuning_res, blk_pattern_size, tuning_cmd_idx);
         if (status != ZX_OK || memcmp(blk_pattern, tuning_res, blk_pattern_size)) {
             break;
         }
@@ -880,16 +877,15 @@ bool AmlSdEmmc::aml_sd_emmc_tuning_test_delay(const uint8_t* blk_pattern,
     return (n == AML_SD_EMMC_ADJ_DELAY_TEST_ATTEMPTS);
 }
 
-zx_status_t AmlSdEmmc::aml_sd_emmc_tuning_calculate_best_window(const uint8_t* tuning_blk,
-                                                            uint16_t tuning_blk_size,
-                                                            uint32_t cur_clk_div, int* best_start,
-                                                            uint32_t* best_size,
-                                                            uint32_t tuning_cmd_idx) {
+zx_status_t AmlSdEmmc::TuningCalculateBestWindow(const uint8_t* tuning_blk,
+                                                 uint16_t tuning_blk_size,
+                                                 uint32_t cur_clk_div, int* best_start,
+                                                 uint32_t* best_size, uint32_t tuning_cmd_idx) {
     int cur_win_start = -1, best_win_start = -1;
     uint32_t cycle_begin_win_size = 0, cur_win_size = 0, best_win_size = 0;
 
     for (uint32_t adj_delay = 0; adj_delay < cur_clk_div; adj_delay++) {
-        if (aml_sd_emmc_tuning_test_delay(tuning_blk, tuning_blk_size, adj_delay,
+        if (TuningTestDelay(tuning_blk, tuning_blk_size, adj_delay,
                                           tuning_cmd_idx)) {
             if (cur_win_start < 0) {
                 cur_win_start = static_cast<int> (adj_delay);
@@ -959,9 +955,8 @@ zx_status_t AmlSdEmmc::SdmmcPerformTuning(uint32_t tuning_cmd_idx) {
     clk_div = get_bits(clk_val, AML_SD_EMMC_CLOCK_CFG_DIV_MASK, AML_SD_EMMC_CLOCK_CFG_DIV_LOC);
 
     do {
-        aml_sd_emmc_tuning_calculate_best_window(tuning_blk, tuning_blk_size,
-                                                 clk_div, &best_win_start, &best_win_size,
-                                                 tuning_cmd_idx);
+        TuningCalculateBestWindow(tuning_blk, tuning_blk_size, clk_div, &best_win_start,
+                                  &best_win_size, tuning_cmd_idx);
         if (best_win_size == 0) {
             // Lower the frequency and try again
             zxlogf(INFO, "Tuning failed. Reducing the frequency and trying again\n");

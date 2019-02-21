@@ -61,29 +61,24 @@ private:
     void DumpSdmmcClock(uint32_t clock) const;
     void DumpSdmmcCmdCfg(uint32_t cmd_desc) const;
     uint32_t GetClkFreq(uint32_t clk_src) const;
-    zx_status_t aml_sd_emmc_do_tuning_transfer(uint8_t* tuning_res,
-                                               uint16_t blk_pattern_size,
-                                               uint32_t tuning_cmd_idx);
-    bool aml_sd_emmc_tuning_test_delay(const uint8_t* blk_pattern,
-                                       uint16_t blk_pattern_size, uint32_t adj_delay,
-                                       uint32_t tuning_cmd_idx);
-    zx_status_t aml_sd_emmc_tuning_calculate_best_window(const uint8_t* tuning_blk,
-                                                         uint16_t tuning_blk_size,
-                                                         uint32_t cur_clk_div, int* best_start,
-                                                         uint32_t* best_size,
-                                                         uint32_t tuning_cmd_idx);
+    zx_status_t TuningDoTransfer(uint8_t* tuning_res, uint16_t blk_pattern_size,
+                                 uint32_t tuning_cmd_idx);
+    bool TuningTestDelay(const uint8_t* blk_pattern,
+                         uint16_t blk_pattern_size, uint32_t adj_delay,
+                         uint32_t tuning_cmd_idx);
+    zx_status_t TuningCalculateBestWindow(const uint8_t* tuning_blk,
+                                          uint16_t tuning_blk_size,
+                                          uint32_t cur_clk_div, int* best_start,
+                                          uint32_t* best_size,
+                                          uint32_t tuning_cmd_idx);
     void ConfigureDefaultRegs();
-    void SetupCmdDesc(sdmmc_req_t* req,
-                                    aml_sd_emmc_desc_t** out_desc);
-    zx_status_t SetupDataDescsDma(sdmmc_req_t* req,
-                                                 aml_sd_emmc_desc_t* cur_desc,
-                                                 aml_sd_emmc_desc_t** last_desc);
-    zx_status_t SetupDataDescsPio(sdmmc_req_t* req,
-                                                 aml_sd_emmc_desc_t* desc,
-                                                 aml_sd_emmc_desc_t** last_desc);
-    zx_status_t SetupDataDescs(sdmmc_req_t *req,
-                                             aml_sd_emmc_desc_t *desc,
-                                             aml_sd_emmc_desc_t **last_desc);
+    void SetupCmdDesc(sdmmc_req_t* req, aml_sd_emmc_desc_t** out_desc);
+    zx_status_t SetupDataDescsDma(sdmmc_req_t* req, aml_sd_emmc_desc_t* cur_desc,
+                                  aml_sd_emmc_desc_t** last_desc);
+    zx_status_t SetupDataDescsPio(sdmmc_req_t* req, aml_sd_emmc_desc_t* desc,
+                                  aml_sd_emmc_desc_t** last_desc);
+    zx_status_t SetupDataDescs(sdmmc_req_t *req, aml_sd_emmc_desc_t *desc,
+                               aml_sd_emmc_desc_t **last_desc);
     zx_status_t FinishReq(sdmmc_req_t* req);
     int IrqThread();
     zx_status_t Bind();
