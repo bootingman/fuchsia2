@@ -58,3 +58,37 @@ void zx_device::fbl_recycle() TA_NO_THREAD_SAFETY_ANALYSIS {
         devmgr::devhost_finalize();
     }
 }
+
+static mtx_t local_id_map_lock_ = MTX_INIT;
+static fbl::WAVLTree<uint64_t, fbl::RefPtr<zx_device>, zx_device::LocalIdKeyTraits,
+        zx_device::LocalIdNode> local_id_map_ TA_GUARDED(local_id_map_lock_);
+
+void zx_device::set_local_id(uint64_t id) {
+    // If this is the last reference, we want it to go away outside of the lock
+    fbl::RefPtr<zx_device> old_entry;
+    mtx_lock(&local_id_map_lock_);
+
+    if (local_id_ != 0) {
+        old_entry = local_id_map_.erase(*this);
+        ZX_ASSERT(old_entry.get() == this);
+    }
+
+    local_id_ = id;
+
+    if (id != 0) {
+        local_id_map_.insert(fbl::WrapRefPtr(this));
+    }
+    mtx_unlock(&local_id_map_lock_);
+}
+
+fbl::RefPtr<zx_device> zx_device::GetDeviceFromLocalId(uint64_t local_id) {
+    mtx_lock(&local_id_map_lock_);
+    auto itr = local_id_map_.find(local_id);
+    if (itr == local_id_map_.end()) {
+        mtx_unlock(&local_id_map_lock_);
+        return nullptr;
+    }
+    auto ptr = fbl::WrapRefPtr(&*itr);
+    mtx_unlock(&local_id_map_lock_);
+    return ptr;
+}
