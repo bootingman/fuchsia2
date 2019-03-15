@@ -6,12 +6,14 @@ driver("msm8x53-som") {
   sources = [
     "msm8x53.cpp",
     "msm8x53-gpio.cpp",
+    "msm8x53-sdc1.cpp",
   ]
   deps = [
     "$zx/system/banjo/ddk-protocol-platform-bus",
     "$zx/system/dev/lib/msm8x53",
     "$zx/system/ulib/ddk",
     "$zx/system/ulib/ddktl",
+    "$zx/system/ulib/fbl",
   ]
   data_deps = [
     "$zx/kernel/target/arm64/boot-shim:msm8x53-som",
