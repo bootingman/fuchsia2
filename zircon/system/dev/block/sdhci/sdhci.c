@@ -1064,18 +1064,20 @@ static zx_status_t sdhci_bind(void* ctx, zx_device_t* parent) {
     }
 
     // Map the Device Registers so that we can perform MMIO against the device.
-    status = dev->sdhci.ops->get_mmio(dev->sdhci.ctx, &dev->regs_handle);
+    zx_off_t vmo_offset = 0;
+    status = dev->sdhci.ops->get_mmio(dev->sdhci.ctx, &dev->regs_handle, &vmo_offset);
     if (status != ZX_OK) {
         zxlogf(ERROR, "sdhci: error %d in get_mmio\n", status);
         goto fail;
     }
     status = zx_vmar_map(zx_vmar_root_self(), ZX_VM_PERM_READ | ZX_VM_PERM_WRITE, 0,
-                         dev->regs_handle, 0, ROUNDUP(sizeof(dev->regs), PAGE_SIZE),
+                         dev->regs_handle, 0, ROUNDUP(vmo_offset + sizeof(dev->regs), PAGE_SIZE),
                          (uintptr_t*)&dev->regs);
     if (status != ZX_OK) {
         zxlogf(ERROR, "sdhci: error %d in zx_vmar_map\n", status);
         goto fail;
     }
+    dev->regs = (sdhci_regs_t*)((uintptr_t)dev->regs + vmo_offset);
     status = dev->sdhci.ops->get_bti(dev->sdhci.ctx, 0, &dev->bti_handle);
     if (status != ZX_OK) {
         zxlogf(ERROR, "sdhci: error %d in get_bti\n", status);
