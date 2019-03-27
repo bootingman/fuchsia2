@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-
 #include <stdlib.h>
 
 #include <utility>
@@ -125,7 +124,7 @@ zx_off_t Bind::DeviceGetSize(zx_device_t* device) {
     return size_;
 }
 
-}  // namespace fake_ddk
+} // namespace fake_ddk
 
 zx_status_t device_add_from_driver(zx_driver_t* drv, zx_device_t* parent,
                                    device_add_args_t* args, zx_device_t** out) {
@@ -178,6 +177,11 @@ zx_off_t device_get_size(zx_device_t* device) {
     return fake_ddk::Bind::Instance()->DeviceGetSize(device);
 }
 
-extern "C" void driver_printf(uint32_t flags, const char* fmt, ...) {}
+extern "C" void driver_printf(uint32_t flags, const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stdout, fmt, args);
+    va_end(args);
+}
 
 zx_driver_rec __zircon_driver_rec__ = {};
