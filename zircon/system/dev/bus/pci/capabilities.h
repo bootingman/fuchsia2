@@ -136,4 +136,4 @@ const char* CapabilityIdToName(Capability::Id id);
 const char* ExtCapabilityIdToName(ExtCapability::Id id);
 } // namespace pci
 
-#endif  // ZIRCON_SYSTEM_DEV_BUS_PCI_CAPABILITIES_H_
+#endif // ZIRCON_SYSTEM_DEV_BUS_PCI_CAPABILITIES_H_
