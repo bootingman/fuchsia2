@@ -20,20 +20,36 @@ mod central_expectation {
     pub fn scan_enabled() -> Predicate<CentralState> {
         Predicate::new(
             |state: &CentralState| -> bool {
-                !state.scan_state_changes.is_empty()
-                    && state.scan_state_changes.last() == Some(&ScanStateChange::ScanEnabled)
+                state.scan_state_changes.last() == Some(&ScanStateChange::ScanEnabled)
             },
             Some("Scan was enabled"),
         )
     }
+    /*
     pub fn scan_disabled() -> Predicate<CentralState> {
         Predicate::new(
             |state: &CentralState| -> bool {
-                !state.scan_state_changes.is_empty()
                     && state.scan_state_changes.last() == Some(&ScanStateChange::ScanDisabled)
             },
             Some("Scan was disabled"),
         )
+    }
+    */
+    pub fn scan_disabled() -> Predicate<CentralState> {
+        Predicate::equal(Some(ScanStateChange::ScanDisabled))
+            .over(|state: &CentralState| state.scan_state_changes.last().cloned())
+
+            /*
+            // -or-
+        
+        Predicate::over(|state| state.scan_state_changes.last())
+            .equal(Some(ScanStateChange::ScanDisabled))
+
+            // -or-
+
+        focus!( .scan_state_changes.last() )
+            .equal(Some(ScanStateChange::ScanDisabled))
+            */
     }
     pub fn device_found(expected_name: &str) -> Predicate<CentralState> {
         let expected_name = expected_name.to_string();

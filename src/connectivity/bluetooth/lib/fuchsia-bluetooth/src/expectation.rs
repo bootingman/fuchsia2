@@ -69,11 +69,59 @@ impl<T: 'static> Predicate<T> {
     }
 }
 
+impl<B: 'static> Predicate<B> {
+    pub fn over<F, A>(self, project: F, path: String) -> Predicate<A>
+    where F: Fn(&A) -> B + Send + Sync + 'static {
+        let inner = self.inner;
+        let description = self.description;
+        Predicate {
+            inner: Arc::new(move |t| (inner)(&project(t))),
+            description: format!("OVER {} EXPECTED {}", path, description)
+        }
+    }
+}
+
+impl<T: PartialEq + Debug + Send + Sync + 'static> Predicate<T> {
+    pub fn equal(expected: T) -> Predicate<T> {
+        let description = format!("Equal to {:?}", expected);
+        Predicate{ inner: Arc::new(move |t| t == &expected), description }
+    }
+}
+
+//($body:ident, $signal:ident, $peer:ident, $id:ident, $request_variant:ident, $responder_type:ident) => {
+macro_rules! focus {
+    ($type:ty, $pred:ident, $var:ident => $selector:expr) => {
+        $pred.over(|$var: &$type| $selector, stringify!($selector).to_string())
+    }
+}
+
 /// Expectations for Bluetooth Peers (i.e. Remote Devices)
 pub mod peer {
     use super::Predicate;
     use fidl_fuchsia_bluetooth_control::{RemoteDevice, TechnologyType};
 
+    pub fn name(expected_name: &str) -> Predicate<RemoteDevice> {
+        let p = Predicate::equal(Some(expected_name.to_string()));
+        focus!(RemoteDevice, p, peer => peer.name.clone())
+            //.over(|peer: &RemoteDevice| peer.name.clone())
+
+        //Predicate::<RemoteDevice>::over(|peer| peer.name.clone())
+        //    .equal(Some(expected_name.to_string()))
+
+        //Predicate::<RemoteDevice>::focus!(.name.clone()).equal(Some(expected_name.to_string()))
+
+        //over!(RemoteDevice, .name.clone()).equal(Some(expected_name.to_string()))
+
+        /*
+        let name = Some(expected_name.to_string());
+        Predicate::<RemoteDevice>::new(
+            move |peer| peer.name == name,
+            Some(&format!("name == {}", expected_name)),
+        )
+        */
+    }
+
+    /*
     pub fn name(expected_name: &str) -> Predicate<RemoteDevice> {
         let name = Some(expected_name.to_string());
         Predicate::<RemoteDevice>::new(
@@ -81,6 +129,7 @@ pub mod peer {
             Some(&format!("name == {}", expected_name)),
         )
     }
+    */
     pub fn address(expected_address: &str) -> Predicate<RemoteDevice> {
         let address = expected_address.to_string();
         Predicate::<RemoteDevice>::new(
@@ -240,6 +289,13 @@ mod test {
     fn predicate_not_correct_fails() {
         let predicate = correct_name().not();
         assert!(!predicate.satisfied(&test_peer()));
+    }
+
+    #[test]
+    fn over_simple_incorrect_predicate_fail() {
+        let p = Predicate::equal(Some("INCORRECT_NAME".to_string()));
+        let predicate = focus!(RemoteDevice, p, peer => peer.name.clone());
+        assert!(predicate.satisfied(&test_peer()));
     }
 
 }
