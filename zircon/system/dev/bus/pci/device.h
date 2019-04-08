@@ -13,7 +13,6 @@
 #include "ref_counted.h"
 #include <assert.h>
 #include <ddktl/device.h>
-#include <ddktl/protocol/pci.h>
 #include <fbl/algorithm.h>
 #include <fbl/intrusive_double_list.h>
 #include <fbl/intrusive_wavl_tree.h>
@@ -21,6 +20,7 @@
 #include <fbl/mutex.h>
 #include <fbl/ref_ptr.h>
 #include <fbl/unique_ptr.h>
+#include <lib/zx/channel.h>
 #include <hw/pci.h>
 #include <region-alloc/region-alloc.h>
 #include <sys/types.h>
@@ -55,9 +55,8 @@ struct BarInfo {
 // is fulfill the PCI protocol for the driver downstream operating the PCI
 // device this corresponds to.
 class Device;
-using PciDeviceType = ddk::Device<pci::Device>;
+using PciDeviceType = ddk::Device<pci::Device, ddk::Rxrpcable>;
 class Device : public PciDeviceType,
-               public ddk::PciProtocol<pci::Device>,
                public fbl::DoublyLinkedListable<Device*> {
 public:
     using NodeState = fbl::WAVLTreeNodeState<fbl::RefPtr<pci::Device>>;
@@ -92,22 +91,23 @@ public:
         fbl::RefPtr<PciExpressCapability> pcie;
     };
 
-    // DDKTL PciProtocol methods
-    zx_status_t PciGetBar(uint32_t bar_id, zx_pci_bar_t* out_res);
-    zx_status_t PciEnableBusMaster(bool enable);
-    zx_status_t PciResetDevice();
-    zx_status_t PciMapInterrupt(zx_status_t which_irq, zx::interrupt* out_handle);
-    zx_status_t PciQueryIrqMode(zx_pci_irq_mode_t mode, uint32_t* out_max_irqs);
-    zx_status_t PciSetIrqMode(zx_pci_irq_mode_t mode, uint32_t requested_irq_count);
-    zx_status_t PciGetDeviceInfo(zx_pcie_device_info_t* out_into);
-    zx_status_t PciConfigRead(uint16_t offset, size_t width, uint32_t* out_value);
-    zx_status_t PciConfigWrite(uint16_t offset, size_t width, uint32_t value);
-    uint8_t PciGetNextCapability(uint8_t type, uint8_t offset);
-    zx_status_t PciGetAuxdata(const char* args,
+    // DDKTL PciProtocol methods that will be called by Rxrpc.
+    zx_status_t RpcGetBar(uint32_t bar_id, zx_pci_bar_t* out_res);
+    zx_status_t RpcEnableBusMaster(bool enable);
+    zx_status_t RpcResetDevice();
+    zx_status_t RpcMapInterrupt(zx_status_t which_irq, zx::interrupt* out_handle);
+    zx_status_t RpcQueryIrqMode(zx_pci_irq_mode_t mode, uint32_t* out_max_irqs);
+    zx_status_t RpcSetIrqMode(zx_pci_irq_mode_t mode, uint32_t requested_irq_count);
+    zx_status_t RpcGetDeviceInfo(zx_pcie_device_info_t* out_into);
+    zx_status_t RpcConfigRead(uint16_t offset, size_t width, uint32_t* out_value);
+    zx_status_t RpcConfigWrite(uint16_t offset, size_t width, uint32_t value);
+    uint8_t RpcGetNextCapability(uint8_t type, uint8_t offset);
+    zx_status_t RpcGetAuxdata(const char* args,
                               void* out_data_buffer,
                               size_t data_size,
                               size_t* out_data_actual);
-    zx_status_t PciGetBti(uint32_t index, zx::bti* out_bti);
+    zx_status_t RpcGetBti(uint32_t index, zx::bti* out_bti);
+    zx_status_t DdkRxrpc(zx_handle_t channel);
 
     // DDK mix-in impls
     void DdkRelease() { delete this; }
@@ -117,6 +117,7 @@ public:
                               fbl::RefPtr<Config>&& config,
                               UpstreamNode* upstream,
                               BusLinkInterface* bli);
+    zx_status_t CreateProxy();
     virtual ~Device();
 
     // Bridge or DeviceImpl will need to implement refcounting
@@ -259,6 +260,7 @@ protected:
     // An upstream node will outlive its downstream devices
     UpstreamNode* upstream_; // The upstream node in the device graph.
     BusLinkInterface* const bli_;
+    zx::channel proxy_ch_;
 
 private:
     // Allow UpstreamNode implementations to Probe/Allocate/Configure/Disable.

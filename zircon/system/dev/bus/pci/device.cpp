@@ -20,6 +20,7 @@
 #include <fbl/unique_ptr.h>
 #include <inttypes.h>
 #include <string.h>
+#include <ddk//binding.h>
 #include <zircon/compiler.h>
 #include <zircon/time.h>
 #include <zircon/types.h>
@@ -88,6 +89,27 @@ Device::~Device() {
     pci_tracef("%s [%s] dtor finished\n", is_bridge() ? "bridge" : "device", cfg_->addr());
 }
 
+zx_status_t Device::CreateProxy() {
+    char name[20];
+    snprintf(name, sizeof(name), "%02x:%02x.%1x", bus_id(), dev_id(), func_id());
+    zx_device_prop_t device_props[] = {
+        {BIND_PROTOCOL, 0, ZX_PROTOCOL_PCI},
+        {BIND_PCI_VID, 0, vendor_id_},
+        {BIND_PCI_DID, 0, device_id_},
+        {BIND_PCI_CLASS, 0, class_id_},
+        {BIND_PCI_SUBCLASS, 0, subclass_},
+        {BIND_PCI_INTERFACE, 0, prog_if_},
+        {BIND_PCI_REVISION, 0, rev_id_},
+        {BIND_TOPO_PCI, 0,
+            static_cast<uint32_t>(BIND_TOPO_PCI_PACK(bus_id(), dev_id(), func_id()))},
+    };
+
+    // Create an isolated devhost to load the proxy pci driver containing the DeviceProxy
+    // instance which will talk to this device.
+    return DdkAdd(name, DEVICE_ADD_MUST_ISOLATE, device_props, countof(device_props));
+}
+
+
 zx_status_t Device::Create(zx_device_t* parent,
                            fbl::RefPtr<Config>&& config,
                            UpstreamNode* upstream,
@@ -140,6 +162,13 @@ zx_status_t Device::InitLocked() {
     // Now that we know what our capabilities are, initialize our internal IRQ
     // bookkeeping
     // TODO(cja): IRQ initialization
+
+    st = CreateProxy();
+    if (st != ZX_OK) {
+        pci_errorf("device %s couldn't spawn its proxy devhost: %d\n", cfg_->addr(), st);
+        return st;
+    }
+
     disable.cancel();
     return ZX_OK;
 }
@@ -167,33 +196,6 @@ void Device::ModifyCmdLocked(uint16_t clr_bits, uint16_t set_bits) {
     cfg_->Write(
         Config::kCommand,
         static_cast<uint16_t>((cfg_->Read(Config::kCommand) & ~clr_bits) | set_bits));
-}
-
-zx_status_t Device::EnableBusMaster(bool enabled) {
-    if (enabled && disabled_) {
-        return ZX_ERR_BAD_STATE;
-    }
-
-    return ModifyCmd(enabled ? 0 : PCI_COMMAND_BUS_MASTER_EN,
-                     enabled ? PCI_COMMAND_BUS_MASTER_EN : 0);
-}
-
-zx_status_t Device::EnablePio(bool enabled) {
-    if (enabled && disabled_) {
-        return ZX_ERR_BAD_STATE;
-    }
-
-    return ModifyCmd(enabled ? 0 : PCI_COMMAND_IO_EN,
-                     enabled ? PCI_COMMAND_IO_EN : 0);
-}
-
-zx_status_t Device::EnableMmio(bool enabled) {
-    if (enabled && disabled_) {
-        return ZX_ERR_BAD_STATE;
-    }
-
-    return ModifyCmd(enabled ? 0 : PCI_COMMAND_MEM_EN,
-                     enabled ? PCI_COMMAND_MEM_EN : 0);
 }
 
 void Device::Disable() {
@@ -628,6 +630,10 @@ void Device::Dump() const {
                    (&cap == &caps_.list.back()) ? "\n" : ", ");
         }
     }
+}
+
+zx_status_t Device::DdkRxrpc(zx_handle_t channel) {
+    return ZX_OK;
 }
 
 } // namespace pci
