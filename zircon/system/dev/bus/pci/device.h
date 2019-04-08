@@ -13,7 +13,6 @@
 #include "ref_counted.h"
 #include <assert.h>
 #include <ddktl/device.h>
-#include <ddktl/protocol/pci.h>
 #include <fbl/algorithm.h>
 #include <fbl/intrusive_double_list.h>
 #include <fbl/intrusive_wavl_tree.h>
@@ -22,6 +21,7 @@
 #include <fbl/ref_ptr.h>
 #include <fbl/unique_ptr.h>
 #include <hw/pci.h>
+#include <lib/zx/channel.h>
 #include <region-alloc/region-alloc.h>
 #include <sys/types.h>
 #include <zircon/compiler.h>
@@ -35,18 +35,6 @@ namespace pci {
 class UpstreamNode;
 class BusLinkInterface;
 
-// struct used to fetch information about a configured base address register
-struct BarInfo {
-    size_t size = 0;
-    zx_paddr_t address = 0; // Allocated address for the bar
-    bool is_mmio;
-    bool is_64bit;
-    bool is_prefetchable;
-    uint32_t bar_id; // The bar index in the config space. If the bar is 64 bit
-                     // then this corresponds to the first half of the register pair
-    fbl::unique_ptr<PciAllocation> allocation;
-};
-
 // A pci::Device represents a given PCI(e) device on a bus. It can be used
 // standalone for a regular PCI(e) device on the bus, or as the base class for a
 // Bridge. Most work a pci::Device does is limited to its own registers in
@@ -55,9 +43,8 @@ struct BarInfo {
 // is fulfill the PCI protocol for the driver downstream operating the PCI
 // device this corresponds to.
 class Device;
-using PciDeviceType = ddk::Device<pci::Device>;
+using PciDeviceType = ddk::Device<pci::Device, ddk::Rxrpcable>;
 class Device : public PciDeviceType,
-               public ddk::PciProtocol<pci::Device>,
                public fbl::DoublyLinkedListable<Device*> {
 public:
     using NodeState = fbl::WAVLTreeNodeState<fbl::RefPtr<pci::Device>>;
@@ -87,28 +74,41 @@ public:
         }
     };
 
+    // struct used to hold information about a configured base address register
+    struct BarInfo {
+        size_t size = 0;
+        zx_paddr_t address = 0; // Allocated address for the bar
+        bool is_mmio;
+        bool is_64bit;
+        bool is_prefetchable;
+        uint32_t bar_id; // The bar index in the config space. If the bar is 64 bit
+        // then this corresponds to the first half of the register pair
+        fbl::unique_ptr<PciAllocation> allocation;
+    };
+
     struct Capabilities {
         CapabilityList list;
         PciExpressCapability* pcie;
     };
 
-    // DDKTL PciProtocol methods
-    zx_status_t PciGetBar(uint32_t bar_id, zx_pci_bar_t* out_res);
-    zx_status_t PciEnableBusMaster(bool enable);
-    zx_status_t PciResetDevice();
-    zx_status_t PciMapInterrupt(zx_status_t which_irq, zx::interrupt* out_handle);
-    zx_status_t PciQueryIrqMode(zx_pci_irq_mode_t mode, uint32_t* out_max_irqs);
-    zx_status_t PciSetIrqMode(zx_pci_irq_mode_t mode, uint32_t requested_irq_count);
-    zx_status_t PciGetDeviceInfo(zx_pcie_device_info_t* out_into);
-    zx_status_t PciConfigRead(uint16_t offset, size_t width, uint32_t* out_value);
-    zx_status_t PciConfigWrite(uint16_t offset, size_t width, uint32_t value);
-    zx_status_t PciGetNextCapability(uint8_t type, uint8_t offset, uint8_t* out_offset);
-    zx_status_t PciGetFirstCapability(uint8_t type, uint8_t* out_offset);
-    zx_status_t PciGetAuxdata(const char* args,
+    // DDKTL PciProtocol methods that will be called by Rxrpc.
+    zx_status_t RpcGetBar(uint32_t bar_id, zx_pci_bar_t* out_res);
+    zx_status_t RpcEnableBusMaster(bool enable);
+    zx_status_t RpcResetDevice();
+    zx_status_t RpcMapInterrupt(zx_status_t which_irq, zx::interrupt* out_handle);
+    zx_status_t RpcQueryIrqMode(zx_pci_irq_mode_t mode, uint32_t* out_max_irqs);
+    zx_status_t RpcSetIrqMode(zx_pci_irq_mode_t mode, uint32_t requested_irq_count);
+    zx_status_t RpcGetDeviceInfo(zx_pcie_device_info_t* out_into);
+    zx_status_t RpcConfigRead(uint16_t offset, size_t width, uint32_t* out_value);
+    zx_status_t RpcConfigWrite(uint16_t offset, size_t width, uint32_t value);
+    zx_status_t RpcGetNextCapability(uint8_t type, uint8_t offset, uint8_t* out_offset);
+    zx_status_t RpcetFirstCapability(uint8_t type, uint8_t* out_offset);
+    zx_status_t RpcGetAuxdata(const char* args,
                               void* out_data_buffer,
                               size_t data_size,
                               size_t* out_data_actual);
-    zx_status_t PciGetBti(uint32_t index, zx::bti* out_bti);
+    zx_status_t RpcGetBti(uint32_t index, zx::bti* out_bti);
+    zx_status_t DdkRxrpc(zx_handle_t channel);
 
     // DDK mix-in impls
     void DdkRelease() { delete this; }
@@ -118,6 +118,7 @@ public:
                               fbl::RefPtr<Config>&& config,
                               UpstreamNode* upstream,
                               BusLinkInterface* bli);
+    zx_status_t CreateProxy();
     virtual ~Device();
 
     // Bridge or DeviceImpl will need to implement refcounting
