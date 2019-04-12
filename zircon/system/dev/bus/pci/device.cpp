@@ -108,7 +108,7 @@ zx_status_t Device::CreateProxy() {
 
     // Create an isolated devhost to load the proxy pci driver containing the DeviceProxy
     // instance which will talk to this device.
-    return DdkAdd(name, DEVICE_ADD_MUST_ISOLATE, device_props, countof(device_props),
+    return DdkAdd(cfg_->addr(), DEVICE_ADD_MUST_ISOLATE, device_props, countof(device_props),
                   ZX_PROTOCOL_PCI, proxy_arg);
 }
 
@@ -221,6 +221,15 @@ void Device::DisableLocked() {
     for (auto& bar : bars_) {
         bar.allocation = nullptr;
     }
+}
+
+zx_status_t Device::EnableBusMaster(bool enabled) {
+    if (enabled && disabled_) {
+        return ZX_ERR_BAD_STATE;
+    }
+
+    return ModifyCmd(enabled ? 0 : PCI_COMMAND_BUS_MASTER_EN,
+                     enabled ? PCI_COMMAND_BUS_MASTER_EN : 0);
 }
 
 zx_status_t Device::ProbeBar(uint32_t bar_id) {
@@ -635,10 +644,6 @@ void Device::Dump() const {
                    (&cap == &caps_.list.back()) ? "\n" : ", ");
         }
     }
-}
-
-zx_status_t Device::DdkRxrpc(zx_handle_t channel) {
-    return ZX_OK;
 }
 
 } // namespace pci

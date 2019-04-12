@@ -15,21 +15,21 @@
 
 namespace pci {
 
-enum PciRpcOp {
+enum PciRpcOp : uint32_t {
     PCI_OP_INVALID = 0,
-    PCI_OP_RESET_DEVICE,
-    PCI_OP_ENABLE_BUS_MASTER,
     PCI_OP_CONFIG_READ,
     PCI_OP_CONFIG_WRITE,
-    PCI_OP_GET_BAR,
-    PCI_OP_QUERY_IRQ_MODE,
-    PCI_OP_SET_IRQ_MODE,
-    PCI_OP_MAP_INTERRUPT,
-    PCI_OP_GET_DEVICE_INFO,
-    PCI_OP_GET_AUXDATA,
-    PCI_OP_GET_BTI,
     PCI_OP_CONNECT_SYSMEM,
+    PCI_OP_ENABLE_BUS_MASTER,
+    PCI_OP_GET_AUXDATA,
+    PCI_OP_GET_BAR,
+    PCI_OP_GET_BTI,
+    PCI_OP_GET_DEVICE_INFO,
     PCI_OP_GET_NEXT_CAPABILITY,
+    PCI_OP_MAP_INTERRUPT,
+    PCI_OP_QUERY_IRQ_MODE,
+    PCI_OP_RESET_DEVICE,
+    PCI_OP_SET_IRQ_MODE,
     PCI_OP_MAX,
 };
 
@@ -39,6 +39,15 @@ struct PciMsgCfg {
     uint16_t offset;
     uint16_t width;
     uint32_t value;
+};
+
+// In the event of an MMIO bar all the information here will be available
+// via VMO operations on the handle passed back.
+struct PciMsgBar {
+    uint32_t id;
+    bool is_mmio;
+    uint16_t io_addr;
+    uint16_t io_size;
 };
 
 // For use with QUERY_IRQ_MODE, SET_IRQ_MODE, and MAP_INTERRUPT
@@ -63,17 +72,13 @@ struct PciMsgCapaility {
 // to be served by the same impl on the other end of RPC.
 const uint16_t PciCapOffsetFirst = 4097u;
 
+// TODO(ZX-3927): port this to non-zx_pcie structures
 using PciMsgDeviceInfo = zx_pcie_device_info_t;
-using PciMsgBar = zx_pci_bar_t;
 
 struct PciRpcMsg {
-    zx_txid_t txid; // FIDL message header
-    uint32_t reserved0;
-    uint32_t flags;
-    uint32_t ordinal;
-
-    uint32_t outlen;
-    uint32_t datalen;
+    zx_txid_t txid; // handled by zx_channel_call
+    uint32_t op;
+    zx_status_t ret;
     // Subtract the size of the preceeding 6 uint32_ts to keep
     // the structure inside a single page.
     union {
@@ -99,7 +104,7 @@ public:
         : PciDeviceProxyType(parent), rpcch_(rpcch) {}
     static zx_status_t Create(zx_device_t* parent, zx_handle_t rpcch, const char* name);
     // A helper method to reduce the complexity of each individual PciProtocol method.
-    zx_status_t RpcRequest(uint32_t op, zx_handle_t* handle, PciRpcMsg* req, PciRpcMsg* resp);
+    zx_status_t RpcRequest(PciRpcOp op, zx_handle_t* handle, PciRpcMsg* req, PciRpcMsg* resp);
     zx_status_t DdkGetProtocol(uint32_t proto_id, void* out);
     void DdkRelease() { delete this; }
 
@@ -111,8 +116,12 @@ public:
     zx_status_t PciQueryIrqMode(zx_pci_irq_mode_t mode, uint32_t* out_max_irqs);
     zx_status_t PciSetIrqMode(zx_pci_irq_mode_t mode, uint32_t requested_irq_count);
     zx_status_t PciGetDeviceInfo(zx_pcie_device_info_t* out_into);
-    zx_status_t PciConfigRead(uint16_t offset, size_t width, uint32_t* out_value);
-    zx_status_t PciConfigWrite(uint16_t offset, size_t width, uint32_t value);
+    zx_status_t PciConfigRead8(uint16_t offset, uint8_t* out_value);
+    zx_status_t PciConfigRead16(uint16_t offset, uint16_t* out_value);
+    zx_status_t PciConfigRead32(uint16_t offset, uint32_t* out_value);
+    zx_status_t PciConfigWrite8(uint16_t offset, uint8_t value);
+    zx_status_t PciConfigWrite16(uint16_t offset, uint16_t value);
+    zx_status_t PciConfigWrite32(uint16_t offset, uint32_t value);
     zx_status_t PciGetFirstCapability(uint8_t cap_id, uint8_t* out_offset);
     zx_status_t PciGetNextCapability(uint8_t cap_id, uint8_t offset, uint8_t* out_offset);
     zx_status_t PciGetAuxdata(const char* args,
@@ -122,6 +131,11 @@ public:
     zx_status_t PciGetBti(uint32_t index, zx::bti* out_bti);
 
 private:
+    // Helpers to marshal config-based RPC.
+    template <typename T>
+    zx_status_t PciConfigRead(uint16_t offset, T* out_value);
+    template <typename T>
+    zx_status_t PciConfigWrite(uint16_t offset, T value);
     zx::channel rpcch_;
 };
 

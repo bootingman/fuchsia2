@@ -10,6 +10,7 @@
 #include "allocation.h"
 #include "capabilities.h"
 #include "config.h"
+#include "device_proxy.h"
 #include "ref_counted.h"
 #include <assert.h>
 #include <ddktl/device.h>
@@ -92,22 +93,18 @@ public:
     };
 
     // DDKTL PciProtocol methods that will be called by Rxrpc.
-    zx_status_t RpcGetBar(uint32_t bar_id, zx_pci_bar_t* out_res);
-    zx_status_t RpcEnableBusMaster(bool enable);
-    zx_status_t RpcResetDevice();
-    zx_status_t RpcMapInterrupt(zx_status_t which_irq, zx::interrupt* out_handle);
-    zx_status_t RpcQueryIrqMode(zx_pci_irq_mode_t mode, uint32_t* out_max_irqs);
-    zx_status_t RpcSetIrqMode(zx_pci_irq_mode_t mode, uint32_t requested_irq_count);
-    zx_status_t RpcGetDeviceInfo(zx_pcie_device_info_t* out_into);
-    zx_status_t RpcConfigRead(uint16_t offset, size_t width, uint32_t* out_value);
-    zx_status_t RpcConfigWrite(uint16_t offset, size_t width, uint32_t value);
-    zx_status_t RpcGetNextCapability(uint8_t type, uint8_t offset, uint8_t* out_offset);
-    zx_status_t RpcetFirstCapability(uint8_t type, uint8_t* out_offset);
-    zx_status_t RpcGetAuxdata(const char* args,
-                              void* out_data_buffer,
-                              size_t data_size,
-                              size_t* out_data_actual);
-    zx_status_t RpcGetBti(uint32_t index, zx::bti* out_bti);
+    zx_status_t RpcConfigRead(const zx::unowned_channel& ch);
+    zx_status_t RpcConfigWrite(const zx::unowned_channel& ch);
+    zx_status_t RpcEnableBusMaster(const zx::unowned_channel& ch);
+    zx_status_t RpcGetAuxdata(const zx::unowned_channel& ch);
+    zx_status_t RpcGetBar(const zx::unowned_channel& ch);
+    zx_status_t RpcGetBti(const zx::unowned_channel& ch);
+    zx_status_t RpcGetDeviceInfo(const zx::unowned_channel& ch);
+    zx_status_t RpcGetNextCapability(const zx::unowned_channel& ch);
+    zx_status_t RpcMapInterrupt(const zx::unowned_channel& ch);
+    zx_status_t RpcQueryIrqMode(const zx::unowned_channel& ch);
+    zx_status_t RpcResetDevice(const zx::unowned_channel& ch);
+    zx_status_t RpcSetIrqMode(const zx::unowned_channel& ch);
     zx_status_t DdkRxrpc(zx_handle_t channel);
 
     // DDK mix-in impls
@@ -263,6 +260,8 @@ protected:
     BusLinkInterface* const bli_;
 
 private:
+    zx_status_t RpcReply(const zx::unowned_channel& ch, zx_status_t st,
+                         zx_handle_t* handles = nullptr, const uint32_t handle_cnt = 0);
     // Allow UpstreamNode implementations to Probe/Allocate/Configure/Disable.
     friend class UpstreamNode;
     friend class Bridge;
@@ -291,6 +290,10 @@ private:
 
     // IRQ structures
     // TODO(cja): Port over the IRQ support from kernel pci.
+
+    // Used for Rxrpc / RpcReply for protocol buffers.
+    PciRpcMsg request_;
+    PciRpcMsg response_;
 
     // These allow a device to exist in an upstream node list as well
     // as the top level bus list of all devices.

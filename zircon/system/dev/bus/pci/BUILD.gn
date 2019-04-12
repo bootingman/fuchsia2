@@ -21,6 +21,7 @@ source_set("user_pci") {
     "capabilities.cpp",
     "config.cpp",
     "device.cpp",
+    "device_protocol.cpp",
     "upstream_node.cpp",
   ]
   public_deps = [
@@ -55,6 +56,7 @@ if (enable_user_pci) {
       "$zx/system/banjo/ddk-protocol-pci",
       "$zx/system/ulib/ddk",
       "$zx/system/ulib/ddktl",
+      "$zx/system/ulib/pretty",
       "$zx/system/ulib/zxcpp",
     ]
   }
