@@ -4,6 +4,7 @@
 
 use std::{
     fmt::{self, Debug, Formatter},
+    pretty::{BoxAllocator, DocAllocator, DocBuilder},
     sync::Arc,
 };
 
@@ -186,6 +187,12 @@ pub mod host_driver {
             Some(&format!("discoverable == {}", discoverable)),
         )
     }
+}
+
+type Doc<'a> = BoxDoc<'a, ()>;
+
+fn desc() -> Doc<'a> {
+    pretty::Doc::newline()
 }
 
 #[cfg(test)]
