@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use std::{
-    fmt::{self, Debug, Formatter},
-    pretty::{BoxAllocator, DocAllocator, DocBuilder},
-    sync::Arc,
+use {
+    std::{
+        fmt::{self, Debug, Formatter},
+        sync::Arc,
+    },
+    //pretty::{BoxAllocator, DocAllocator, DocBuilder},
+    pretty::{BoxAllocator, DocAllocator},
 };
 
 /// Asynchronous extensions to Expectation Predicates
@@ -18,6 +21,15 @@ pub struct Predicate<T> {
     inner: Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>,
     /// A descriptive piece of text used for debug printing via `{:?}`
     description: String,
+}
+
+// A function for producing a pretty-printed Doc
+type DescFn = Arc<dyn for<'a> Fn(&'a BoxAllocator) -> DocBuilder<'a> + Send + Sync + 'static>;
+
+pub struct Pred<T> {
+    inner: Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>,
+
+    desc: DescFn,
 }
 
 impl<T> Clone for Predicate<T> {
@@ -86,6 +98,38 @@ impl<T: PartialEq + Debug + Send + Sync + 'static> Predicate<T> {
     pub fn equal(expected: T) -> Predicate<T> {
         let description = format!("Equal to {:?}", expected);
         Predicate{ inner: Arc::new(move |t| t == &expected), description }
+    }
+}
+
+impl<T: PartialEq + Debug + Send + Sync + 'static> Pred<T> {
+    pub fn equal(expected: T) -> Pred<T> {
+        let txt = format!("Equal to {:?}", expected);
+        Pred{
+            inner: Arc::new(move |t| t == &expected),
+            desc: Arc::new(move |alloc| {
+                alloc.text(txt.clone())
+            }),
+        }
+    }
+}
+
+impl<T: 'static> Pred<T> {
+    pub fn and(self, rhs: Pred<T>) -> Pred<T> {
+        //let description = format!("({}) AND ({})", self.description, rhs.description);
+        let self_desc = self.desc.clone();
+        let rhs_desc = rhs.desc.clone();
+        Pred {
+            inner: Arc::new(move |t: &T| -> bool { (self.inner)(t) && (rhs.inner)(t) }),
+            desc: Arc::new(move |alloc| {
+                alloc.text("(")
+                    .append((self_desc)(alloc))
+                    .append(alloc.text(")"))
+                    .append(alloc.text("AND"))
+                    .append(alloc.text("("))
+                    .append((rhs_desc)(alloc))
+                    .append(alloc.text(")"))
+            }),
+        }
     }
 }
 
@@ -189,10 +233,12 @@ pub mod host_driver {
     }
 }
 
-type Doc<'a> = BoxDoc<'a, ()>;
+//type Doc<'a> = pretty::BoxDoc<'a, ()>;
 
-fn desc() -> Doc<'a> {
-    pretty::Doc::newline()
+type DocBuilder<'a> = pretty::DocBuilder<'a, BoxAllocator>;
+
+fn desc<'a>(alloc: &'a BoxAllocator) -> DocBuilder<'a> {
+    alloc.text("foo").append(alloc.newline())
 }
 
 #[cfg(test)]
