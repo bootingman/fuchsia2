@@ -79,7 +79,7 @@ impl<T, U: PartialEq + Debug> IsOver<T> for OverPred<T,U> {
     }
     fn falsify(&self, t: &T) -> Option<String> {
         match self.pred.falsify((self.project)(t)) {
-            Some(s) => Some(format!("OVER\n\t{}\nPROJECT\n\t{}", self.name(), s)),
+            Some(s) => Some(format!("{} {}", self.name(), s)),
             None => None,
         }
     }
@@ -109,7 +109,7 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
         t.into_iter().any(|i| self.pred.satisfied(i))
     }
     fn desc(&self) -> String {
-        format!("ANY\n\t{}", self.pred.describe())
+        format!("ANY {}", self.pred.describe())
     }
     fn falsify(&self, t: &T) -> Option<String> {
         // TODO(nickpollard) - Is this right?
@@ -140,11 +140,11 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
         t.into_iter().all(|i| self.pred.satisfied(i))
     }
     fn desc(&self) -> String {
-        format!("ALL\n\t{}", self.pred.describe())
+        format!("ALL {}", self.pred.describe())
     }
     fn falsify(&self, t: &T) -> Option<String> {
         let failures = t.into_iter()
-            .filter_map(|i| self.pred.falsify(i))
+            .filter_map(|i| self.pred.falsify(i).map(|msg| format!("ELEM {:?} FAILS: {}", i, msg)))
             .take(MAX_ITER_FALSIFICATIONS)
             .fold(None, |acc, falsification| Some(format!("{}{}",acc.unwrap_or("".to_string()), falsification)));
         failures.map(|msg| format!("FAILED\n\t{}\nDUE TO\n\t{}", self.desc(), msg))
@@ -182,14 +182,14 @@ impl<T: PartialEq + Debug> Pred<T> {
 
     pub fn describe(&self) -> String {
         match self {
-            Pred::Equal(expected) => format!("Expected {:?}", expected),
-            Pred::And(left, right) => format!("\t{:?}\nAND\n\t{:?}", left.describe(), right.describe()),
-            Pred::Or(left, right) => format!("\t{:?}\nOR\n\t{:?}", left.describe(), right.describe()),
-            Pred::Not(inner) => format!("NOT\n\t{:?}", inner.describe()),
+            Pred::Equal(expected) => format!("EQUAL {:?}", expected),
+            Pred::And(left, right) => format!("({}) AND ({})", left.describe(), right.describe()),
+            Pred::Or(left, right) => format!("({}) OR ({})", left.describe(), right.describe()),
+            Pred::Not(inner) => format!("NOT {}", inner.describe()),
             Pred::Pred(_, desc) => desc.clone(),
-            Pred::Over(over) => format!("OVER\n\t{:?}\nPROJECT\n\t{:?}", over.name(), over.desc()),
-            Pred::Any(any) => format!("ANY\n\t{:?}", any.desc()),
-            Pred::All(all) => format!("ALL\n\t{:?}", all.desc()),
+            Pred::Over(over) => format!("{} {}", over.name(), over.desc()),
+            Pred::Any(any) => any.desc(),
+            Pred::All(all) => all.desc(),
         }
     }
 
@@ -213,7 +213,7 @@ impl<T: PartialEq + Debug> Pred<T> {
             }
             Pred::Or(left, right) => {
                 match (left.falsify(t), right.falsify(t)) {
-                    (Some(l), Some(r)) => Some(format!("EXPECTED one to be true but:n\t{}\nAND\t{}", l, r)),
+                    (Some(l), Some(r)) => Some(format!("({}) AND ({})", l, r)),
                     (Some(_), None) => None,
                     (None, Some(_)) => None,
                     (None, None) => None
@@ -222,7 +222,7 @@ impl<T: PartialEq + Debug> Pred<T> {
             Pred::Not(inner) => {
                 match inner.falsify(t) {
                     Some(_) => None,
-                    None => Some(format!("Expected NOT but {:?} satisfies \n\t{:?}", t, inner.describe())),
+                    None => Some(format!("NOT {}", inner.describe())),
                 }
             },
             Pred::Pred(pred, desc) => {
@@ -282,6 +282,7 @@ impl<T: Clone> Pred<T> {
     }
     */
 
+    // TODO(nickpollard) - don't take Option
     pub fn new<F>(f: F, label: Option<&str>) -> Pred<T>
     where
         F: Fn(&T) -> bool + Send + Sync + 'static,

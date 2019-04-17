@@ -132,13 +132,13 @@ fn over_simple_incorrect_not_predicate_fail() -> Result<(),AssertionText> {
     r
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct Person {
     name: String,
     age: u64,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct Group {
     persons: Vec<Person>,
 }
@@ -146,7 +146,8 @@ struct Group {
 #[test]
 fn persons() -> Result<(),AssertionText> {
     //let p = Pred::not(&Pred::Equal(Some(TEST_PEER_NAME.to_string())));
-    let p = Pred::<Vec<Person>>::all(Pred::not(&Pred::Equal("Sergei".to_string())).over(|p: &Person| &p.name, ".name"));
+    let p = Pred::<Vec<Person>>::all(Pred::not(&Pred::Equal("Sergei".to_string())).over(|p: &Person| &p.name, ".name")
+                                     .and(Pred::new(|age: &u64| *age < 50, Some("< 50")).over(|p: &Person| &p.age, ".age")));
     //let predicate = focus!(RemoteDevice, p, peer => peer.name.clone());
     let predicate = p.over(|p: &Group| &p.persons, ".persons");
     let test_group = Group { persons: vec![Person{ name: "Larry".to_string(), age: 40 }, Person{ name: "Sergei".to_string(), age: 41 }] };
