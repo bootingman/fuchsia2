@@ -5,6 +5,7 @@
 use {
     std::{
         fmt::{self, Debug, Formatter},
+        marker::PhantomData,
         sync::Arc,
     },
     //pretty::{BoxAllocator, DocAllocator, DocBuilder},
@@ -41,12 +42,89 @@ impl fmt::Debug for AssertionText {
 }
 
 // A function for producing a pretty-printed Doc
-type DescFn = Arc<dyn for<'a> Fn(&'a BoxAllocator) -> DocBuilder<'a> + Send + Sync + 'static>;
+//type DescFn = Arc<dyn for<'a> Fn(&'a BoxAllocator) -> DocBuilder<'a> + Send + Sync + 'static>;
 
+/*
 pub struct Pred<T> {
     inner: Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>,
 
     desc: DescFn,
+}
+*/
+
+struct OverPred<T,U> {
+    pred: Pred<U>,
+    project: Arc<dyn Fn(&T) -> &U + Send + Sync + 'static>,
+    path: String,
+}
+
+// Trait representation of OverPred where `U` is existential
+pub trait IsOver<T> {
+    fn apply(&self, t: &T) -> bool;
+    fn desc(&self) -> String;
+    fn name(&self) -> String;
+}
+
+impl<T, U: PartialEq + Debug> IsOver<T> for OverPred<T,U> {
+//    type U_ = U;
+    fn apply(&self, t: &T) -> bool {
+        self.pred.satisfied((self.project)(t))
+    }
+    fn desc(&self) -> String {
+        self.pred.describe()
+    }
+    fn name(&self) -> String {
+        self.path.clone()
+    }
+}
+
+struct AnyPred<T, Elem>
+where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
+    pred: Pred<Elem>,
+    _phantom: PhantomData<T>
+    //project: Arc<dyn Fn(&T) -> &Iter + Send + Sync + 'static>,
+}
+
+// Trait representation of AnyPred where `Iter` is existential
+pub trait IsAny<T> {
+    fn apply(&self, t: &T) -> bool;
+    fn desc(&self) -> String;
+}
+
+pub enum Pred<T> {
+    Equal(T),
+    And(Arc<Pred<T>>, Arc<Pred<T>>),
+    Or(Arc<Pred<T>>, Arc<Pred<T>>),
+    Not(Arc<Pred<T>>),
+    Pred(Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>, String),
+    // instead of: Over(Pred<U>, Fn(&T)->&U), // for some U
+    Over(Arc<dyn IsOver<T>>), // for some U
+    // instead of: Any(Fn(&T) -> I, Pred<I::Elem>), // for some I, where I::Elem : Debug
+    Any(Arc<dyn IsAny<T>>),
+}
+
+impl<T: PartialEq + Debug> Pred<T> {
+    pub fn satisfied(&self, t: &T) -> bool {
+        match self {
+            Pred::Equal(expected) => *t == *expected,
+            Pred::And(left, right) => left.satisfied(t) && right.satisfied(t),
+            Pred::Or(left, right) => left.satisfied(t) || right.satisfied(t),
+            Pred::Not(inner) => !inner.satisfied(t),
+            _ => panic!("NYI"),
+        }
+    }
+
+    pub fn describe(&self) -> String {
+        match self {
+            Pred::Equal(expected) => format!("Expected {:?}", expected),
+            Pred::And(left, right) => format!("\t{:?}\nAND\n\t{:?}", left.describe(), right.describe()),
+            Pred::Or(left, right) => format!("\t{:?}\nOR\n\t{:?}", left.describe(), right.describe()),
+            Pred::Not(inner) => format!("NOT\n\t{:?}", inner.describe()),
+            Pred::Pred(_, desc) => desc.clone(),
+            Pred::Over(over) => format!("OVER\n\t{:?}\nPROJECT\n\t{:?}", over.name(), over.desc()),
+            Pred::Any(any) => format!("ANY\n\t{:?}", any.desc()),
+        }
+    }
 }
 
 impl<T> Clone for Predicate<T> {
@@ -126,19 +204,11 @@ impl<T: PartialEq + Debug + Send + Sync + 'static> Predicate<T> {
     }
 }
 
-impl<T: PartialEq + Debug + Send + Sync + 'static> Pred<T> {
-    pub fn equal(expected: T) -> Pred<T> {
-        let txt = format!("Equal to {:?}", expected);
-        Pred{
-            inner: Arc::new(move |t| t == &expected),
-            desc: Arc::new(move |alloc| {
-                alloc.text(txt.clone())
-            }),
-        }
-    }
-}
+//impl<T: PartialEq + Debug + Send + Sync + 'static> Pred<T> {
+//}
 
 impl<T: 'static> Pred<T> {
+    /*
     pub fn and(self, rhs: Pred<T>) -> Pred<T> {
         //let description = format!("({}) AND ({})", self.description, rhs.description);
         let self_desc = self.desc.clone();
@@ -156,6 +226,7 @@ impl<T: 'static> Pred<T> {
             }),
         }
     }
+    */
 }
 
 //($body:ident, $signal:ident, $peer:ident, $id:ident, $request_variant:ident, $responder_type:ident) => {
