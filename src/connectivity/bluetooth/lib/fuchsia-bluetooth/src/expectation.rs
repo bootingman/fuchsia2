@@ -79,7 +79,7 @@ impl<T, U: PartialEq + Debug> IsOver<T> for OverPred<T,U> {
     }
     fn falsify(&self, t: &T) -> Option<String> {
         match self.pred.falsify((self.project)(t)) {
-            Some(s) => Some(format!("OVER\n\t{:?}\nPROJECT\n\t{:?}", self.name(), s)),
+            Some(s) => Some(format!("OVER\n\t{}\nPROJECT\n\t{}", self.name(), s)),
             None => None,
         }
     }
@@ -158,8 +158,8 @@ pub enum Pred<T> {
     Or(Arc<Pred<T>>, Arc<Pred<T>>),
     Not(Arc<Pred<T>>),
     Pred(Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>, String),
-    // instead of: Over(Pred<U>, Fn(&T)->&U), // for some U
-    Over(Arc<dyn IsOver<T>>), // for some U
+    // instead of: Over(Pred<U>, Fn(&T)->&U) for<U>
+    Over(Arc<dyn IsOver<T>>),
     // instead of: Any(Fn(&T) -> I, Pred<I::Elem>) for<I> where I::Elem: Debug
     Any(Arc<dyn IsAny<T>>),
     // instead of: All(Fn(&T) -> I, Pred<I::Elem>) for<I> where I::Elem: Debug
@@ -237,6 +237,26 @@ impl<T: PartialEq + Debug> Pred<T> {
             Pred::All(all) => all.falsify(t),
         }
     }
+    pub fn satisfied_(&self, t: &T) -> Result<(),AssertionText> {
+        match self.falsify(t) {
+            Some(falsification) => Err(AssertionText(format!("FAILED EXPECTATION\n\t{}\nFALSIFIED BY\n\t{}", self.describe(), falsification))),
+            None => Ok(()),
+        }
+    }
+}
+
+impl<Elem, T> Pred<T>
+where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
+    Elem: PartialEq + Debug + 'static,
+    T: 'static {
+
+    pub fn all(pred: Pred<Elem>) -> Pred<T> {
+        Pred::All(Arc::new(AllPred{ pred, _phantom: PhantomData }))
+    }
+
+    pub fn any(pred: Pred<Elem>) -> Pred<T> {
+        Pred::Any(Arc::new(AnyPred{ pred, _phantom: PhantomData }))
+    }
 }
 
 impl<T: Clone> Pred<T> {
@@ -250,11 +270,35 @@ impl<T: Clone> Pred<T> {
         Pred::Not(Arc::new(self.clone()))
     }
 
+    /*
+    pub fn all<F, A>(self, project: F) -> Predicate<A>
+    where F: Fn(&A) -> B + Send + Sync + 'static {
+        let inner = self.inner;
+        let description = self.description;
+        Predicate {
+            inner: Arc::new(move |t| (inner)(&project(t))),
+            description: format!("OVER\n\t{}\nEXPECTED\n\t{}", path.into(), description)
+        }
+    }
+    */
+
     pub fn new<F>(f: F, label: Option<&str>) -> Pred<T>
     where
         F: Fn(&T) -> bool + Send + Sync + 'static,
     {
         Pred::Pred(Arc::new(f), label.unwrap_or("<Unrepresentable Predicate>").to_string())
+    }
+}
+
+impl<B: PartialEq + Debug + 'static> Pred<B> {
+    pub fn over<F, A: 'static, S>(self, project: F, path: S) -> Pred<A>
+    where F: Fn(&A) -> &B + Send + Sync + 'static,
+          S: Into<String> {
+        Pred::Over(Arc::new(OverPred {
+            pred: self,
+            project: Arc::new(project),
+            path: path.into(),
+        }))
     }
 }
 
@@ -334,9 +378,6 @@ impl<T: PartialEq + Debug + Send + Sync + 'static> Predicate<T> {
         Predicate{ inner: Arc::new(move |t| t == &expected), description }
     }
 }
-
-//impl<T: PartialEq + Debug + Send + Sync + 'static> Pred<T> {
-//}
 
 impl<T: 'static> Pred<T> {
     /*

@@ -116,27 +116,45 @@ fn predicate_not_correct_fails() {
 
 #[test]
 fn over_simple_incorrect_predicate_fail() -> Result<(),AssertionText> {
-    let p = Predicate::equal(Some("INCORRECT_NAME".to_string()));
+    let p = Pred::Equal(Some("INCORRECT_NAME".to_string()));
     //let predicate = focus!(RemoteDevice, p, peer => peer.name.clone());
-    let predicate = p.over(|p: &RemoteDevice| p.name.clone(), ".name");
+    let predicate = p.over(|p: &RemoteDevice| &p.name, ".name");
     let r = predicate.satisfied_(&test_peer());
-    //if let Err(e) = &r {
-        //println!("{}", e);
-    //};
     r
 }
 
 #[test]
 fn over_simple_incorrect_not_predicate_fail() -> Result<(),AssertionText> {
-    let p = Predicate::not(Predicate::equal(Some(TEST_PEER_NAME.to_string())));
+    let p = Pred::not(&Pred::Equal(Some(TEST_PEER_NAME.to_string())));
     //let predicate = focus!(RemoteDevice, p, peer => peer.name.clone());
-    let predicate = p.over(|p: &RemoteDevice| p.name.clone(), ".name");
+    let predicate = p.over(|p: &RemoteDevice| &p.name, ".name");
     let r = predicate.satisfied_(&test_peer());
-    //if let Err(e) = &r {
-        //println!("{}", e);
-    //};
     r
 }
+
+#[derive(Debug, PartialEq)]
+struct Person {
+    name: String,
+    age: u64,
+}
+
+#[derive(Debug, PartialEq)]
+struct Group {
+    persons: Vec<Person>,
+}
+
+#[test]
+fn persons() -> Result<(),AssertionText> {
+    //let p = Pred::not(&Pred::Equal(Some(TEST_PEER_NAME.to_string())));
+    let p = Pred::<Vec<Person>>::all(Pred::not(&Pred::Equal("Sergei".to_string())).over(|p: &Person| &p.name, ".name"));
+    //let predicate = focus!(RemoteDevice, p, peer => peer.name.clone());
+    let predicate = p.over(|p: &Group| &p.persons, ".persons");
+    let test_group = Group { persons: vec![Person{ name: "Larry".to_string(), age: 40 }, Person{ name: "Sergei".to_string(), age: 41 }] };
+    let r = predicate.satisfied_(&test_group);
+    r
+}
+
+
 
 
 /*
