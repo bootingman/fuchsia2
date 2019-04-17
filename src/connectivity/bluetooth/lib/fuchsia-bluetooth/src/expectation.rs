@@ -63,6 +63,7 @@ pub trait IsOver<T> {
     fn apply(&self, t: &T) -> bool;
     fn desc(&self) -> String;
     fn name(&self) -> String;
+    fn falsify(&self, t: &T) -> Option<String>;
 }
 
 impl<T, U: PartialEq + Debug> IsOver<T> for OverPred<T,U> {
@@ -76,21 +77,81 @@ impl<T, U: PartialEq + Debug> IsOver<T> for OverPred<T,U> {
     fn name(&self) -> String {
         self.path.clone()
     }
+    fn falsify(&self, t: &T) -> Option<String> {
+        match self.pred.falsify((self.project)(t)) {
+            Some(s) => Some(format!("OVER\n\t{:?}\nPROJECT\n\t{:?}", self.name(), s)),
+            None => None,
+        }
+    }
 }
+
+/// At most how many elements of an iterator to show in a falsification, when falsifying `any` or
+/// `all`
+const MAX_ITER_FALSIFICATIONS: usize = 5;
 
 struct AnyPred<T, Elem>
 where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
     pred: Pred<Elem>,
     _phantom: PhantomData<T>
-    //project: Arc<dyn Fn(&T) -> &Iter + Send + Sync + 'static>,
 }
 
 // Trait representation of AnyPred where `Iter` is existential
 pub trait IsAny<T> {
     fn apply(&self, t: &T) -> bool;
     fn desc(&self) -> String;
+    fn falsify(&self, t: &T) -> Option<String>;
 }
 
+impl<T, Elem> IsAny<T> for AnyPred<T,Elem>
+where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
+    Elem: PartialEq + Debug {
+    fn apply(&self, t: &T) -> bool {
+        t.into_iter().any(|i| self.pred.satisfied(i))
+    }
+    fn desc(&self) -> String {
+        format!("ANY\n\t{}", self.pred.describe())
+    }
+    fn falsify(&self, t: &T) -> Option<String> {
+        // TODO(nickpollard) - Is this right?
+        t.into_iter()
+            .filter_map(|i| self.pred.falsify(i))
+            .take(MAX_ITER_FALSIFICATIONS)
+            .fold(None, |acc, falsification| Some(format!("{}{}",acc.unwrap_or("".to_string()), falsification)))
+    }
+}
+
+struct AllPred<T, Elem>
+where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
+    pred: Pred<Elem>,
+    _phantom: PhantomData<T>
+}
+
+// Trait representation of AllPred where `Iter` is existential
+pub trait IsAll<T> {
+    fn apply(&self, t: &T) -> bool;
+    fn desc(&self) -> String;
+    fn falsify(&self, t: &T) -> Option<String>;
+}
+
+impl<T, Elem> IsAll<T> for AllPred<T,Elem>
+where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
+    Elem: PartialEq + Debug {
+    fn apply(&self, t: &T) -> bool {
+        t.into_iter().all(|i| self.pred.satisfied(i))
+    }
+    fn desc(&self) -> String {
+        format!("ALL\n\t{}", self.pred.describe())
+    }
+    fn falsify(&self, t: &T) -> Option<String> {
+        let failures = t.into_iter()
+            .filter_map(|i| self.pred.falsify(i))
+            .take(MAX_ITER_FALSIFICATIONS)
+            .fold(None, |acc, falsification| Some(format!("{}{}",acc.unwrap_or("".to_string()), falsification)));
+        failures.map(|msg| format!("FAILED\n\t{}\nDUE TO\n\t{}", self.desc(), msg))
+    }
+}
+
+#[derive(Clone)]
 pub enum Pred<T> {
     Equal(T),
     And(Arc<Pred<T>>, Arc<Pred<T>>),
@@ -99,8 +160,10 @@ pub enum Pred<T> {
     Pred(Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>, String),
     // instead of: Over(Pred<U>, Fn(&T)->&U), // for some U
     Over(Arc<dyn IsOver<T>>), // for some U
-    // instead of: Any(Fn(&T) -> I, Pred<I::Elem>), // for some I, where I::Elem : Debug
+    // instead of: Any(Fn(&T) -> I, Pred<I::Elem>) for<I> where I::Elem: Debug
     Any(Arc<dyn IsAny<T>>),
+    // instead of: All(Fn(&T) -> I, Pred<I::Elem>) for<I> where I::Elem: Debug
+    All(Arc<dyn IsAll<T>>),
 }
 
 impl<T: PartialEq + Debug> Pred<T> {
@@ -110,7 +173,10 @@ impl<T: PartialEq + Debug> Pred<T> {
             Pred::And(left, right) => left.satisfied(t) && right.satisfied(t),
             Pred::Or(left, right) => left.satisfied(t) || right.satisfied(t),
             Pred::Not(inner) => !inner.satisfied(t),
-            _ => panic!("NYI"),
+            Pred::Pred(pred, _) => pred(t),
+            Pred::Over(over) => over.apply(t),
+            Pred::Any(any) => any.apply(t),
+            Pred::All(all) => all.apply(t),
         }
     }
 
@@ -123,7 +189,72 @@ impl<T: PartialEq + Debug> Pred<T> {
             Pred::Pred(_, desc) => desc.clone(),
             Pred::Over(over) => format!("OVER\n\t{:?}\nPROJECT\n\t{:?}", over.name(), over.desc()),
             Pred::Any(any) => format!("ANY\n\t{:?}", any.desc()),
+            Pred::All(all) => format!("ALL\n\t{:?}", all.desc()),
         }
+    }
+
+    /// Provide a minimized falsification of the predicate, if possible
+    pub fn falsify(&self, t: &T) -> Option<String> {
+        match self {
+            Pred::Equal(expected) => {
+                if *expected == *t {
+                    None
+                } else {
+                    Some(format!("{:?} != {:?}", t, expected))
+                }
+            },
+            Pred::And(left, right) => {
+                match (left.falsify(t), right.falsify(t)) {
+                    (Some(l), Some(r)) => Some(format!("{}\n{}", l, r)),
+                    (Some(l), None) => Some(l),
+                    (None, Some(r)) => Some(r),
+                    (None, None) => None
+                }
+            }
+            Pred::Or(left, right) => {
+                match (left.falsify(t), right.falsify(t)) {
+                    (Some(l), Some(r)) => Some(format!("EXPECTED one to be true but:n\t{}\nAND\t{}", l, r)),
+                    (Some(_), None) => None,
+                    (None, Some(_)) => None,
+                    (None, None) => None
+                }
+            }
+            Pred::Not(inner) => {
+                match inner.falsify(t) {
+                    Some(_) => None,
+                    None => Some(format!("Expected NOT but {:?} satisfies \n\t{:?}", t, inner.describe())),
+                }
+            },
+            Pred::Pred(pred, desc) => {
+                if pred(t) {
+                    None
+                } else {
+                    Some(desc.to_string())
+                }
+            },
+            Pred::Over(over) => over.falsify(t),
+            Pred::Any(any) => any.falsify(t),
+            Pred::All(all) => all.falsify(t),
+        }
+    }
+}
+
+impl<T: Clone> Pred<T> {
+    pub fn or(self, rhs: Pred<T>) -> Pred<T> {
+        Pred::Or(Arc::new(self.clone()), Arc::new(rhs.clone()))
+    }
+    pub fn and(self, rhs: Pred<T>) -> Pred<T> {
+        Pred::And(Arc::new(self.clone()), Arc::new(rhs.clone()))
+    }
+    pub fn not(&self) -> Pred<T> {
+        Pred::Not(Arc::new(self.clone()))
+    }
+
+    pub fn new<F>(f: F, label: Option<&str>) -> Pred<T>
+    where
+        F: Fn(&T) -> bool + Send + Sync + 'static,
+    {
+        Pred::Pred(Arc::new(f), label.unwrap_or("<Unrepresentable Predicate>").to_string())
     }
 }
 
