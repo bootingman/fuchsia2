@@ -1,5 +1,6 @@
 //use crate::focus;
 use crate::expectation::*;
+use crate::expectation::Predicate as P;
 use fidl_fuchsia_bluetooth_control::{Appearance, RemoteDevice, TechnologyType};
 
 const TEST_PEER_NAME: &'static str = "TestPeer";
@@ -35,34 +36,23 @@ fn test_peer() -> RemoteDevice {
     }
 }
 
-
 #[test]
 fn test() -> Result<(),AssertionText> {
     correct_name().satisfied_(&test_peer())
 }
 
-
-
-
-
-
-
-
-
 #[test]
 fn simple_predicate_succeeds() {
-    let predicate = Predicate::<RemoteDevice>::new(
-        move |peer| peer.name == Some(TEST_PEER_NAME.into()),
-        None,
-        );
+    let predicate = Predicate::equal(Some(TEST_PEER_NAME.to_string())).over(
+            |dev: &RemoteDevice| &dev.name,
+            ".name");
     assert!(predicate.satisfied(&test_peer()));
 }
 #[test]
 fn simple_incorrect_predicate_fail() {
-    let predicate = Predicate::<RemoteDevice>::new(
-        move |peer| peer.name == Some("INCORRECT_NAME".into()),
-        None,
-        );
+    let predicate = Predicate::equal(Some(INCORRECT_PEER_NAME.to_string())).over(
+            |dev: &RemoteDevice| &dev.name,
+            ".name");
     assert!(!predicate.satisfied(&test_peer()));
 }
 
@@ -116,20 +106,16 @@ fn predicate_not_correct_fails() {
 
 #[test]
 fn over_simple_incorrect_predicate_fail() -> Result<(),AssertionText> {
-    let p = Pred::Equal(Some("INCORRECT_NAME".to_string()));
-    //let predicate = focus!(RemoteDevice, p, peer => peer.name.clone());
-    let predicate = p.over(|p: &RemoteDevice| &p.name, ".name");
-    let r = predicate.satisfied_(&test_peer());
-    r
+    let predicate = P::equal(Some("INCORRECT_NAME".to_string()))
+        .over(|p: &RemoteDevice| &p.name, ".name");
+    predicate.satisfied_(&test_peer())
 }
 
 #[test]
 fn over_simple_incorrect_not_predicate_fail() -> Result<(),AssertionText> {
-    let p = Pred::not(&Pred::Equal(Some(TEST_PEER_NAME.to_string())));
-    //let predicate = focus!(RemoteDevice, p, peer => peer.name.clone());
+    let p = P::not(P::equal(Some(TEST_PEER_NAME.to_string())));
     let predicate = p.over(|p: &RemoteDevice| &p.name, ".name");
-    let r = predicate.satisfied_(&test_peer());
-    r
+    predicate.satisfied_(&test_peer())
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -145,29 +131,13 @@ struct Group {
 
 #[test]
 fn persons() -> Result<(),AssertionText> {
-    //let p = Pred::not(&Pred::Equal(Some(TEST_PEER_NAME.to_string())));
-    let p = Pred::<Vec<Person>>::all(Pred::not(&Pred::Equal("Sergei".to_string())).over(|p: &Person| &p.name, ".name")
-                                     .and(Pred::new(|age: &u64| *age < 50, Some("< 50")).over(|p: &Person| &p.age, ".age")));
-    //let predicate = focus!(RemoteDevice, p, peer => peer.name.clone());
+    let test_group = Group {
+        persons: vec![Person{ name: "Larry".to_string(), age: 40 },
+                      Person{ name: "Sergei".to_string(), age: 41 }]
+    };
+
+    let p = P::<Vec<Person>>::all(P::not(P::equal("Sergei".to_string())).over(|p: &Person| &p.name, ".name")
+                                     .and(P::new(|age: &u64| *age < 50, "< 50").over(|p: &Person| &p.age, ".age")));
     let predicate = p.over(|p: &Group| &p.persons, ".persons");
-    let test_group = Group { persons: vec![Person{ name: "Larry".to_string(), age: 40 }, Person{ name: "Sergei".to_string(), age: 41 }] };
-    let r = predicate.satisfied_(&test_group);
-    r
+    predicate.satisfied_(&test_group)
 }
-
-
-
-
-/*
- * OVER
- *   .name
- * EXPECTED
- *   Foo
- * FOUND
- *   Bar
- *
- *
- *
- *
- *
- */

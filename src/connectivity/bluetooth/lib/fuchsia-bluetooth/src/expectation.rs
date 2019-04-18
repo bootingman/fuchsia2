@@ -13,7 +13,7 @@ use {
 };
 
 /// Asynchronous extensions to Expectation Predicates
-pub mod asynchronous;
+//pub mod asynchronous;
 /// Expectations for the host driver
 pub mod host_driver;
 /// Expectations for remote peers
@@ -22,14 +22,13 @@ pub mod peer;
 #[cfg(test)]
 pub mod test;
 
-/// A Boolean predicate on type `T`. Predicate functions are a boolean algebra
-/// just as raw boolean values are; they an be ANDed, ORed, NOTed. This allows
-/// a clear and concise language for declaring test expectations.
-pub struct Predicate<T> {
+/*
+pub struct OldPredicate<T> {
     inner: Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>,
     /// A descriptive piece of text used for debug printing via `{:?}`
     description: String,
 }
+*/
 
 /// A String whose `Debug` implementation pretty-prints
 #[derive(Clone)]
@@ -44,16 +43,8 @@ impl fmt::Debug for AssertionText {
 // A function for producing a pretty-printed Doc
 //type DescFn = Arc<dyn for<'a> Fn(&'a BoxAllocator) -> DocBuilder<'a> + Send + Sync + 'static>;
 
-/*
-pub struct Pred<T> {
-    inner: Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>,
-
-    desc: DescFn,
-}
-*/
-
 struct OverPred<T,U> {
-    pred: Pred<U>,
+    pred: Predicate<U>,
     project: Arc<dyn Fn(&T) -> &U + Send + Sync + 'static>,
     path: String,
 }
@@ -66,7 +57,7 @@ pub trait IsOver<T> {
     fn falsify(&self, t: &T) -> Option<String>;
 }
 
-impl<T, U: PartialEq + Debug> IsOver<T> for OverPred<T,U> {
+impl<T, U: 'static> IsOver<T> for OverPred<T,U> {
 //    type U_ = U;
     fn apply(&self, t: &T) -> bool {
         self.pred.satisfied((self.project)(t))
@@ -91,18 +82,18 @@ const MAX_ITER_FALSIFICATIONS: usize = 5;
 
 struct AnyPred<T, Elem>
 where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
-    pred: Pred<Elem>,
+    pred: Predicate<Elem>,
     _phantom: PhantomData<T>
 }
 
 // Trait representation of AnyPred where `Iter` is existential
-pub trait IsAny<T> {
+pub trait IsAny<T: 'static> {
     fn apply(&self, t: &T) -> bool;
     fn desc(&self) -> String;
     fn falsify(&self, t: &T) -> Option<String>;
 }
 
-impl<T, Elem> IsAny<T> for AnyPred<T,Elem>
+impl<T: 'static, Elem: 'static> IsAny<T> for AnyPred<T,Elem>
 where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
     Elem: PartialEq + Debug {
     fn apply(&self, t: &T) -> bool {
@@ -122,20 +113,20 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
 
 struct AllPred<T, Elem>
 where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
-    pred: Pred<Elem>,
+    pred: Predicate<Elem>,
     _phantom: PhantomData<T>
 }
 
 // Trait representation of AllPred where `Iter` is existential
-pub trait IsAll<T> {
+pub trait IsAll<T: 'static> {
     fn apply(&self, t: &T) -> bool;
     fn desc(&self) -> String;
     fn falsify(&self, t: &T) -> Option<String>;
 }
 
-impl<T, Elem> IsAll<T> for AllPred<T,Elem>
+impl<T: 'static, Elem> IsAll<T> for AllPred<T,Elem>
 where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
-    Elem: PartialEq + Debug {
+    Elem: PartialEq + Debug + 'static {
     fn apply(&self, t: &T) -> bool {
         t.into_iter().all(|i| self.pred.satisfied(i))
     }
@@ -151,59 +142,68 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
     }
 }
 
+/// A Boolean predicate on type `T`. Predicate functions are a boolean algebra
+/// just as raw boolean values are; they an be ANDed, ORed, NOTed. This allows
+/// a clear and concise language for declaring test expectations.
 #[derive(Clone)]
-pub enum Pred<T> {
-    Equal(T),
-    And(Arc<Pred<T>>, Arc<Pred<T>>),
-    Or(Arc<Pred<T>>, Arc<Pred<T>>),
-    Not(Arc<Pred<T>>),
-    Pred(Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>, String),
-    // instead of: Over(Pred<U>, Fn(&T)->&U) for<U>
+pub enum Predicate<T> {
+    Equal(T, Arc<dyn Fn(&T, &T) -> bool>, Arc<dyn Fn(&T) -> String>),
+    And(Box<Predicate<T>>, Box<Predicate<T>>),
+    Or(Box<Predicate<T>>, Box<Predicate<T>>),
+    Not(Box<Predicate<T>>),
+    Predicate(Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>, String),
+    // instead of: Over(Predicate<U>, Fn(&T)->&U) for<U>
     Over(Arc<dyn IsOver<T>>),
-    // instead of: Any(Fn(&T) -> I, Pred<I::Elem>) for<I> where I::Elem: Debug
+    // instead of: Any(Fn(&T) -> I, Predicate<I::Elem>) for<I> where I::Elem: Debug
     Any(Arc<dyn IsAny<T>>),
-    // instead of: All(Fn(&T) -> I, Pred<I::Elem>) for<I> where I::Elem: Debug
+    // instead of: All(Fn(&T) -> I, Predicate<I::Elem>) for<I> where I::Elem: Debug
     All(Arc<dyn IsAll<T>>),
 }
 
-impl<T: PartialEq + Debug> Pred<T> {
+impl<T: PartialEq + Debug + 'static> Predicate<T> {
+    fn equal(t: T) -> Predicate<T> {
+        Predicate::Equal(t, Arc::new(T::eq), Arc::new(|t| format!("{:?}", t)))
+    }
+}
+
+//impl<T: PartialEq + Debug + Send + Sync + 'static> Predicate<T> {
+impl<T> Predicate<T>
+where T: 'static {
     pub fn satisfied(&self, t: &T) -> bool {
         match self {
-            Pred::Equal(expected) => *t == *expected,
-            Pred::And(left, right) => left.satisfied(t) && right.satisfied(t),
-            Pred::Or(left, right) => left.satisfied(t) || right.satisfied(t),
-            Pred::Not(inner) => !inner.satisfied(t),
-            Pred::Pred(pred, _) => pred(t),
-            Pred::Over(over) => over.apply(t),
-            Pred::Any(any) => any.apply(t),
-            Pred::All(all) => all.apply(t),
+            Predicate::Equal(expected, are_eq, _) => are_eq(t, expected),
+            Predicate::And(left, right) => left.satisfied(t) && right.satisfied(t),
+            Predicate::Or(left, right) => left.satisfied(t) || right.satisfied(t),
+            Predicate::Not(inner) => !inner.satisfied(t),
+            Predicate::Predicate(pred, _) => pred(t),
+            Predicate::Over(over) => over.apply(t),
+            Predicate::Any(any) => any.apply(t),
+            Predicate::All(all) => all.apply(t),
         }
     }
-
     pub fn describe(&self) -> String {
         match self {
-            Pred::Equal(expected) => format!("EQUAL {:?}", expected),
-            Pred::And(left, right) => format!("({}) AND ({})", left.describe(), right.describe()),
-            Pred::Or(left, right) => format!("({}) OR ({})", left.describe(), right.describe()),
-            Pred::Not(inner) => format!("NOT {}", inner.describe()),
-            Pred::Pred(_, desc) => desc.clone(),
-            Pred::Over(over) => format!("{} {}", over.name(), over.desc()),
-            Pred::Any(any) => any.desc(),
-            Pred::All(all) => all.desc(),
+            Predicate::Equal(expected, _, repr) => format!("EQUAL {}", repr(expected)),
+            Predicate::And(left, right) => format!("({}) AND ({})", left.describe(), right.describe()),
+            Predicate::Or(left, right) => format!("({}) OR ({})", left.describe(), right.describe()),
+            Predicate::Not(inner) => format!("NOT {}", inner.describe()),
+            Predicate::Predicate(_, desc) => desc.clone(),
+            Predicate::Over(over) => format!("{} {}", over.name(), over.desc()),
+            Predicate::Any(any) => any.desc(),
+            Predicate::All(all) => all.desc(),
         }
     }
-
     /// Provide a minimized falsification of the predicate, if possible
     pub fn falsify(&self, t: &T) -> Option<String> {
         match self {
-            Pred::Equal(expected) => {
-                if *expected == *t {
+            Predicate::Equal(expected, are_eq, repr) => {
+                if are_eq(expected, t) {
                     None
                 } else {
-                    Some(format!("{:?} != {:?}", t, expected))
+                    Some(format!("{} != {}", repr(t), repr(expected)))
                 }
             },
-            Pred::And(left, right) => {
+            Predicate::And(left, right) => {
                 match (left.falsify(t), right.falsify(t)) {
                     (Some(l), Some(r)) => Some(format!("{}\n{}", l, r)),
                     (Some(l), None) => Some(l),
@@ -211,7 +211,7 @@ impl<T: PartialEq + Debug> Pred<T> {
                     (None, None) => None
                 }
             }
-            Pred::Or(left, right) => {
+            Predicate::Or(left, right) => {
                 match (left.falsify(t), right.falsify(t)) {
                     (Some(l), Some(r)) => Some(format!("({}) AND ({})", l, r)),
                     (Some(_), None) => None,
@@ -219,22 +219,22 @@ impl<T: PartialEq + Debug> Pred<T> {
                     (None, None) => None
                 }
             }
-            Pred::Not(inner) => {
+            Predicate::Not(inner) => {
                 match inner.falsify(t) {
                     Some(_) => None,
                     None => Some(format!("NOT {}", inner.describe())),
                 }
             },
-            Pred::Pred(pred, desc) => {
+            Predicate::Predicate(pred, desc) => {
                 if pred(t) {
                     None
                 } else {
                     Some(desc.to_string())
                 }
             },
-            Pred::Over(over) => over.falsify(t),
-            Pred::Any(any) => any.falsify(t),
-            Pred::All(all) => all.falsify(t),
+            Predicate::Over(over) => over.falsify(t),
+            Predicate::Any(any) => any.falsify(t),
+            Predicate::All(all) => all.falsify(t),
         }
     }
     pub fn satisfied_(&self, t: &T) -> Result<(),AssertionText> {
@@ -245,57 +245,47 @@ impl<T: PartialEq + Debug> Pred<T> {
     }
 }
 
-impl<Elem, T> Pred<T>
+impl<Elem, T> Predicate<T>
 where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
-    Elem: PartialEq + Debug + 'static,
-    T: 'static {
+    Elem: PartialEq + Debug + Send + Sync + 'static,
+    T: Send + Sync + 'static {
 
-    pub fn all(pred: Pred<Elem>) -> Pred<T> {
-        Pred::All(Arc::new(AllPred{ pred, _phantom: PhantomData }))
+    pub fn all(pred: Predicate<Elem>) -> Predicate<T> {
+        Predicate::All(Arc::new(AllPred{ pred, _phantom: PhantomData }))
     }
 
-    pub fn any(pred: Pred<Elem>) -> Pred<T> {
-        Pred::Any(Arc::new(AnyPred{ pred, _phantom: PhantomData }))
+    pub fn any(pred: Predicate<Elem>) -> Predicate<T> {
+        Predicate::Any(Arc::new(AnyPred{ pred, _phantom: PhantomData }))
     }
 }
 
-impl<T: Clone> Pred<T> {
-    pub fn or(self, rhs: Pred<T>) -> Pred<T> {
-        Pred::Or(Arc::new(self.clone()), Arc::new(rhs.clone()))
+impl<T> Predicate<T> {
+    pub fn and(self, rhs: Predicate<T>) -> Predicate<T> {
+        Predicate::And(Box::new(self), Box::new(rhs))
     }
-    pub fn and(self, rhs: Pred<T>) -> Pred<T> {
-        Pred::And(Arc::new(self.clone()), Arc::new(rhs.clone()))
+    pub fn or(self, rhs: Predicate<T>) -> Predicate<T> {
+        Predicate::Or(Box::new(self), Box::new(rhs))
     }
-    pub fn not(&self) -> Pred<T> {
-        Pred::Not(Arc::new(self.clone()))
+    pub fn not(self) -> Predicate<T> {
+        Predicate::Not(Box::new(self))
     }
+}
 
-    /*
-    pub fn all<F, A>(self, project: F) -> Predicate<A>
-    where F: Fn(&A) -> B + Send + Sync + 'static {
-        let inner = self.inner;
-        let description = self.description;
-        Predicate {
-            inner: Arc::new(move |t| (inner)(&project(t))),
-            description: format!("OVER\n\t{}\nEXPECTED\n\t{}", path.into(), description)
-        }
-    }
-    */
-
-    // TODO(nickpollard) - don't take Option
-    pub fn new<F>(f: F, label: Option<&str>) -> Pred<T>
+impl<T> Predicate<T> {
+    pub fn new<F, S>(f: F, label: S) -> Predicate<T>
     where
         F: Fn(&T) -> bool + Send + Sync + 'static,
+        S: Into<String>
     {
-        Pred::Pred(Arc::new(f), label.unwrap_or("<Unrepresentable Predicate>").to_string())
+        Predicate::Predicate(Arc::new(f), label.into())
     }
 }
 
-impl<B: PartialEq + Debug + 'static> Pred<B> {
-    pub fn over<F, A: 'static, S>(self, project: F, path: S) -> Pred<A>
+impl<B: 'static> Predicate<B> {
+    pub fn over<F, A: 'static, S>(self, project: F, path: S) -> Predicate<A>
     where F: Fn(&A) -> &B + Send + Sync + 'static,
           S: Into<String> {
-        Pred::Over(Arc::new(OverPred {
+        Predicate::Over(Arc::new(OverPred {
             pred: self,
             project: Arc::new(project),
             path: path.into(),
@@ -303,19 +293,21 @@ impl<B: PartialEq + Debug + 'static> Pred<B> {
     }
 }
 
-impl<T> Clone for Predicate<T> {
-    fn clone(&self) -> Predicate<T> {
-        Predicate { inner: self.inner.clone(), description: self.description.clone() }
+/*
+
+impl<T> Clone for OldPredicate<T> {
+    fn clone(&self) -> OldPredicate<T> {
+        OldPredicate { inner: self.inner.clone(), description: self.description.clone() }
     }
 }
 
-impl<T> Debug for Predicate<T> {
+impl<T> Debug for OldPredicate<T> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.description)
     }
 }
 
-impl<T: 'static> Predicate<T> {
+impl<T: 'static> OldPredicate<T> {
     pub fn satisfied_(&self, t: &T) -> Result<(),AssertionText> {
         if (self.inner)(t) {
             Ok(())
@@ -326,32 +318,32 @@ impl<T: 'static> Predicate<T> {
     pub fn satisfied(&self, t: &T) -> bool {
         (self.inner)(t)
     }
-    pub fn or(self, rhs: Predicate<T>) -> Predicate<T> {
+    pub fn or(self, rhs: OldPredicate<T>) -> OldPredicate<T> {
         let description = format!("({}) OR ({})", self.description, rhs.description);
-        Predicate {
+        OldPredicate {
             inner: Arc::new(move |t: &T| -> bool { (self.inner)(t) || (rhs.inner)(t) }),
             description,
         }
     }
-    pub fn and(self, rhs: Predicate<T>) -> Predicate<T> {
+    pub fn and(self, rhs: OldPredicate<T>) -> OldPredicate<T> {
         let description = format!("({}) AND ({})", self.description, rhs.description);
-        Predicate {
+        OldPredicate {
             inner: Arc::new(move |t: &T| -> bool { (self.inner)(t) && (rhs.inner)(t) }),
             description,
         }
     }
-    pub fn not(self) -> Predicate<T> {
+    pub fn not(self) -> OldPredicate<T> {
         let description = format!("NOT ({})", self.description);
-        Predicate { inner: Arc::new(move |t: &T| -> bool { !(self.inner)(t) }), description }
+        OldPredicate { inner: Arc::new(move |t: &T| -> bool { !(self.inner)(t) }), description }
     }
 
-    pub fn new<F>(f: F, label: Option<&str>) -> Predicate<T>
+    pub fn new<F>(f: F, label: Option<&str>) -> OldPredicate<T>
     where
         F: Fn(&T) -> bool + Send + Sync + 'static,
     {
-        Predicate {
+        OldPredicate {
             inner: Arc::new(f),
-            description: label.unwrap_or("<Unrepresentable Predicate>").to_string(),
+            description: label.unwrap_or("<Unrepresentable OldPredicate>").to_string(),
         }
     }
 
@@ -360,33 +352,34 @@ impl<T: 'static> Predicate<T> {
     }
 }
 
-impl<B: 'static> Predicate<B> {
-    pub fn over<F, A, S>(self, project: F, path: S) -> Predicate<A>
+impl<B: 'static> OldPredicate<B> {
+    pub fn over<F, A, S>(self, project: F, path: S) -> OldPredicate<A>
     where F: Fn(&A) -> B + Send + Sync + 'static,
           S: Into<String> {
         let inner = self.inner;
         let description = self.description;
-        Predicate {
+        OldPredicate {
             inner: Arc::new(move |t| (inner)(&project(t))),
             description: format!("OVER\n\t{}\nEXPECTED\n\t{}", path.into(), description)
         }
     }
 }
 
-impl<T: PartialEq + Debug + Send + Sync + 'static> Predicate<T> {
-    pub fn equal(expected: T) -> Predicate<T> {
+impl<T: PartialEq + Debug + Send + Sync + 'static> OldPredicate<T> {
+    pub fn equal(expected: T) -> OldPredicate<T> {
         let description = format!("Equal to {:?}", expected);
-        Predicate{ inner: Arc::new(move |t| t == &expected), description }
+        OldPredicate{ inner: Arc::new(move |t| t == &expected), description }
     }
 }
+*/
 
-impl<T: 'static> Pred<T> {
+impl<T: 'static> Predicate<T> {
     /*
-    pub fn and(self, rhs: Pred<T>) -> Pred<T> {
+    pub fn and(self, rhs: Predicate<T>) -> Predicate<T> {
         //let description = format!("({}) AND ({})", self.description, rhs.description);
         let self_desc = self.desc.clone();
         let rhs_desc = rhs.desc.clone();
-        Pred {
+        Predicate {
             inner: Arc::new(move |t: &T| -> bool { (self.inner)(t) && (rhs.inner)(t) }),
             desc: Arc::new(move |alloc| {
                 alloc.text("(")
@@ -402,7 +395,6 @@ impl<T: 'static> Pred<T> {
     */
 }
 
-//($body:ident, $signal:ident, $peer:ident, $id:ident, $request_variant:ident, $responder_type:ident) => {
 #[macro_export]
 macro_rules! focus {
     ($type:ty, $pred:ident, $var:ident => $selector:expr) => {
