@@ -13,7 +13,7 @@ use {
 };
 
 /// Asynchronous extensions to Expectation Predicates
-//pub mod asynchronous;
+pub mod asynchronous;
 /// Expectations for the host driver
 pub mod host_driver;
 /// Expectations for remote peers
@@ -43,13 +43,29 @@ impl fmt::Debug for AssertionText {
 // A function for producing a pretty-printed Doc
 //type DescFn = Arc<dyn for<'a> Fn(&'a BoxAllocator) -> DocBuilder<'a> + Send + Sync + 'static>;
 
-struct OverPred<T,U> {
-    pred: Predicate<U>,
-    project: Arc<dyn Fn(&T) -> &U + Send + Sync + 'static>,
-    path: String,
+type CompFn<T> = Arc<dyn Fn(&T, &T) -> bool + Send + Sync + 'static>;
+type ReprFn<T> = Arc<dyn Fn(&T) -> String + Send + Sync + 'static>;
+
+/// A Boolean predicate on type `T`. Predicate functions are a boolean algebra
+/// just as raw boolean values are; they an be ANDed, ORed, NOTed. This allows
+/// a clear and concise language for declaring test expectations.
+#[derive(Clone)]
+pub enum Predicate<T> {
+    Equal(T, CompFn<T>, ReprFn<T>),
+    And(Box<Predicate<T>>, Box<Predicate<T>>),
+    Or(Box<Predicate<T>>, Box<Predicate<T>>),
+    Not(Box<Predicate<T>>),
+    Predicate(Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>, String),
+    // instead of: Over(Predicate<U>, Fn(&T)->&U) for<U>
+    Over(Arc<dyn IsOver<T> + Send + Sync + 'static>),
+    // instead of: Any(Fn(&T) -> I, Predicate<I::Elem>) for<I> where I::Elem: Debug
+    Any(Arc<dyn IsAny<T> + Send + Sync + 'static>),
+    // instead of: All(Fn(&T) -> I, Predicate<I::Elem>) for<I> where I::Elem: Debug
+    All(Arc<dyn IsAll<T> + Send + Sync + 'static>),
 }
 
-// Trait representation of OverPred where `U` is existential
+
+/// Trait representation of OverPred where `U` is existential
 pub trait IsOver<T> {
     fn apply(&self, t: &T) -> bool;
     fn desc(&self) -> String;
@@ -57,8 +73,20 @@ pub trait IsOver<T> {
     fn falsify(&self, t: &T) -> Option<String>;
 }
 
+/// Trait representation of AnyPred where `Iter` is existential
+pub trait IsAny<T: 'static> {
+    fn apply(&self, t: &T) -> bool;
+    fn desc(&self) -> String;
+    fn falsify(&self, t: &T) -> Option<String>;
+}
+
+struct OverPred<T,U> {
+    pred: Predicate<U>,
+    project: Arc<dyn Fn(&T) -> &U + Send + Sync + 'static>,
+    path: String,
+}
+
 impl<T, U: 'static> IsOver<T> for OverPred<T,U> {
-//    type U_ = U;
     fn apply(&self, t: &T) -> bool {
         self.pred.satisfied((self.project)(t))
     }
@@ -86,12 +114,6 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
     _phantom: PhantomData<T>
 }
 
-// Trait representation of AnyPred where `Iter` is existential
-pub trait IsAny<T: 'static> {
-    fn apply(&self, t: &T) -> bool;
-    fn desc(&self) -> String;
-    fn falsify(&self, t: &T) -> Option<String>;
-}
 
 impl<T: 'static, Elem: 'static> IsAny<T> for AnyPred<T,Elem>
 where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
@@ -116,7 +138,7 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
     _phantom: PhantomData<T>
 }
 
-// Trait representation of AllPred where `Iter` is existential
+/// Trait representation of AllPred where `Iter` is existential
 pub trait IsAll<T: 'static> {
     fn apply(&self, t: &T) -> bool;
     fn desc(&self) -> String;
@@ -140,31 +162,12 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
     }
 }
 
-/// A Boolean predicate on type `T`. Predicate functions are a boolean algebra
-/// just as raw boolean values are; they an be ANDed, ORed, NOTed. This allows
-/// a clear and concise language for declaring test expectations.
-#[derive(Clone)]
-pub enum Predicate<T> {
-    Equal(T, Arc<dyn Fn(&T, &T) -> bool>, Arc<dyn Fn(&T) -> String>),
-    And(Box<Predicate<T>>, Box<Predicate<T>>),
-    Or(Box<Predicate<T>>, Box<Predicate<T>>),
-    Not(Box<Predicate<T>>),
-    Predicate(Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>, String),
-    // instead of: Over(Predicate<U>, Fn(&T)->&U) for<U>
-    Over(Arc<dyn IsOver<T>>),
-    // instead of: Any(Fn(&T) -> I, Predicate<I::Elem>) for<I> where I::Elem: Debug
-    Any(Arc<dyn IsAny<T>>),
-    // instead of: All(Fn(&T) -> I, Predicate<I::Elem>) for<I> where I::Elem: Debug
-    All(Arc<dyn IsAll<T>>),
-}
-
 impl<T: PartialEq + Debug + 'static> Predicate<T> {
     fn equal(t: T) -> Predicate<T> {
         Predicate::Equal(t, Arc::new(T::eq), Arc::new(|t| format!("{:?}", t)))
     }
 }
 
-//impl<T: PartialEq + Debug + Send + Sync + 'static> Predicate<T> {
 impl<T> Predicate<T>
 where T: 'static {
     pub fn satisfied(&self, t: &T) -> bool {
@@ -263,9 +266,9 @@ impl<T> Predicate<T> {
 }
 
 /// Methods to work with `T`s that are some collection of elements `Elem`.
-impl<Elem, T: 'static> Predicate<T>
+impl<Elem, T: Send + Sync + 'static> Predicate<T>
 where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
-    Elem: Debug + 'static {
+    Elem: Debug + Send + Sync + 'static {
 
     pub fn all(pred: Predicate<Elem>) -> Predicate<T> {
         Predicate::All(Arc::new(AllPred{ pred, _phantom: PhantomData }))
@@ -276,9 +279,9 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
     }
 }
 
-impl<B: 'static> Predicate<B> {
+impl<T: Send + Sync + 'static> Predicate<T> {
     pub fn over<F, A: 'static, S>(self, project: F, path: S) -> Predicate<A>
-    where F: Fn(&A) -> &B + Send + Sync + 'static,
+    where F: Fn(&A) -> &T + Send + Sync + 'static,
           S: Into<String> {
         Predicate::Over(Arc::new(OverPred {
             pred: self,
