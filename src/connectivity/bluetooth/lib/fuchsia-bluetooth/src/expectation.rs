@@ -8,7 +8,6 @@ use {
         marker::PhantomData,
         sync::Arc,
     },
-    //pretty::{BoxAllocator, DocAllocator, DocBuilder},
     pretty::{BoxAllocator, DocAllocator},
 };
 
@@ -60,7 +59,8 @@ pub enum Predicate<T> {
 /// Trait representation of OverPred where `U` is existential
 pub trait IsOver<T> {
     fn apply(&self, t: &T) -> bool;
-    fn desc(&self) -> String;
+    fn describe(&self) -> String;
+    fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a>;
     fn name(&self) -> String;
     fn falsify(&self, t: &T) -> Option<String>;
 }
@@ -68,7 +68,16 @@ pub trait IsOver<T> {
 /// Trait representation of AnyPred where `Iter` is existential
 pub trait IsAny<T: 'static> {
     fn apply(&self, t: &T) -> bool;
-    fn desc(&self) -> String;
+    fn describe(&self) -> String;
+    fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a>;
+    fn falsify(&self, t: &T) -> Option<String>;
+}
+
+/// Trait representation of AllPred where `Iter` is existential
+pub trait IsAll<T: 'static> {
+    fn apply(&self, t: &T) -> bool;
+    fn describe(&self) -> String;
+    fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a>;
     fn falsify(&self, t: &T) -> Option<String>;
 }
 
@@ -82,8 +91,11 @@ impl<T, U: 'static> IsOver<T> for OverPred<T,U> {
     fn apply(&self, t: &T) -> bool {
         self.pred.satisfied((self.project)(t))
     }
-    fn desc(&self) -> String {
+    fn describe(&self) -> String {
         self.pred.describe()
+    }
+    fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a> {
+        self.pred.describe_(alloc)
     }
     fn name(&self) -> String {
         self.path.clone()
@@ -112,8 +124,13 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
     fn apply(&self, t: &T) -> bool {
         t.into_iter().any(|i| self.pred.satisfied(i))
     }
-    fn desc(&self) -> String {
+    fn describe(&self) -> String {
         format!("ANY {}", self.pred.describe())
+    }
+    fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a> {
+        alloc.text("ANY")
+            .append(alloc.newline())
+            .append(self.pred.describe_(alloc).nest(2))
     }
     fn falsify(&self, t: &T) -> Option<String> {
         // TODO(nickpollard) - Is this right?
@@ -130,27 +147,25 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
     _phantom: PhantomData<T>
 }
 
-/// Trait representation of AllPred where `Iter` is existential
-pub trait IsAll<T: 'static> {
-    fn apply(&self, t: &T) -> bool;
-    fn desc(&self) -> String;
-    fn falsify(&self, t: &T) -> Option<String>;
-}
-
 impl<T: 'static, Elem: Debug + 'static> IsAll<T> for AllPred<T,Elem>
 where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
     fn apply(&self, t: &T) -> bool {
         t.into_iter().all(|i| self.pred.satisfied(i))
     }
-    fn desc(&self) -> String {
+    fn describe(&self) -> String {
         format!("ALL {}", self.pred.describe())
+    }
+    fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a> {
+        alloc.text("ALL")
+            .append(alloc.newline())
+            .append(self.pred.describe_(alloc).nest(2))
     }
     fn falsify(&self, t: &T) -> Option<String> {
         let failures = t.into_iter()
             .filter_map(|i| self.pred.falsify(i).map(|msg| format!("ELEM {:?} FAILS: {}", i, msg)))
             .take(MAX_ITER_FALSIFICATIONS)
             .fold(None, |acc, falsification| Some(format!("{}{}",acc.unwrap_or("".to_string()), falsification)));
-        failures.map(|msg| format!("FAILED\n\t{}\nDUE TO\n\t{}", self.desc(), msg))
+        failures.map(|msg| format!("FAILED\n\t{}\nDUE TO\n\t{}", self.describe(), msg))
     }
 }
 
@@ -158,6 +173,10 @@ impl<T: PartialEq + Debug + 'static> Predicate<T> {
     fn equal(t: T) -> Predicate<T> {
         Predicate::Equal(t, Arc::new(T::eq), Arc::new(|t| format!("{:?}", t)))
     }
+}
+
+fn in_parens<'a>(alloc: &'a BoxAllocator, doc: DocBuilder<'a>) -> DocBuilder<'a> {
+    alloc.text("(").append(doc).append(alloc.text(")"))
 }
 
 impl<T> Predicate<T>
@@ -175,17 +194,48 @@ where T: 'static {
         }
     }
     pub fn describe(&self) -> String {
+        let alloc = BoxAllocator;
+        let doc = self.describe_(&alloc);
+        format!("{}", doc.1.pretty(80))
+    }
+    /*
+    pub fn describe(&self) -> String {
         match self {
             Predicate::Equal(expected, _, repr) => format!("EQUAL {}", repr(expected)),
             Predicate::And(left, right) => format!("({}) AND ({})", left.describe(), right.describe()),
             Predicate::Or(left, right) => format!("({}) OR ({})", left.describe(), right.describe()),
             Predicate::Not(inner) => format!("NOT {}", inner.describe()),
             Predicate::Predicate(_, desc) => desc.clone(),
-            Predicate::Over(over) => format!("{} {}", over.name(), over.desc()),
-            Predicate::Any(any) => any.desc(),
-            Predicate::All(all) => all.desc(),
+            Predicate::Over(over) => format!("{} {}", over.name(), over.describe()),
+            Predicate::Any(any) => any.describe(),
+            Predicate::All(all) => all.describe(),
         }
     }
+    */
+
+    pub fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a> {
+        match self {
+            Predicate::Equal(expected, _, repr) => alloc.text(format!("EQUAL {}", repr(expected))),
+            Predicate::And(left, right) =>
+                in_parens(alloc, alloc.text(left.describe())).nest(2)
+                .append(alloc.newline())
+                .append(alloc.text("AND"))
+                .append(alloc.newline())
+                .append(in_parens(alloc, alloc.text(right.describe())).nest(2)),
+            Predicate::Or(left, right) =>
+                in_parens(alloc, alloc.text(left.describe())).nest(2)
+                .append(alloc.newline())
+                .append(alloc.text("OR"))
+                .append(alloc.newline())
+                .append(in_parens(alloc, alloc.text(right.describe())).nest(2)),
+            Predicate::Not(inner) => alloc.text("NOT").append(alloc.text(inner.describe()).nest(2)),
+            Predicate::Predicate(_, desc) => alloc.text(desc.clone()),
+            Predicate::Over(over) => alloc.text(over.name()).append(alloc.space()).append(over.describe_(alloc)),
+            Predicate::Any(any) => any.describe_(alloc),
+            Predicate::All(all) => all.describe_(alloc),
+        }
+    }
+
     /// Provide a minimized falsification of the predicate, if possible
     pub fn falsify(&self, t: &T) -> Option<String> {
         match self {
@@ -281,28 +331,6 @@ impl<T: Send + Sync + 'static> Predicate<T> {
             path: path.into(),
         }))
     }
-}
-
-impl<T: 'static> Predicate<T> {
-    /*
-    pub fn and(self, rhs: Predicate<T>) -> Predicate<T> {
-        //let description = format!("({}) AND ({})", self.description, rhs.description);
-        let self_desc = self.desc.clone();
-        let rhs_desc = rhs.desc.clone();
-        Predicate {
-            inner: Arc::new(move |t: &T| -> bool { (self.inner)(t) && (rhs.inner)(t) }),
-            desc: Arc::new(move |alloc| {
-                alloc.text("(")
-                    .append((self_desc)(alloc))
-                    .append(alloc.text(")"))
-                    .append(alloc.text("AND"))
-                    .append(alloc.text("("))
-                    .append((rhs_desc)(alloc))
-                    .append(alloc.text(")"))
-            }),
-        }
-    }
-    */
 }
 
 #[macro_export]
