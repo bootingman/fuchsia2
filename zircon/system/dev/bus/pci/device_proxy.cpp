@@ -276,7 +276,15 @@ zx_status_t DeviceProxy::PciGetAuxdata(const char* args,
 
 zx_status_t DeviceProxy::PciGetBti(uint32_t index, zx::bti* out_bti) {
     RPC_ENTRY;
-    DEVICE_PROXY_UNIMPLEMENTED;
+    PciRpcMsg req = {};
+    PciRpcMsg resp = {};
+    req.bti_index = index;
+    zx_handle_t handle;
+    zx_status_t st = RpcRequest(PCI_OP_GET_BTI, &handle, &req, &resp);
+    if (st == ZX_OK) {
+        out_bti->reset(handle);
+    }
+    return st;
 }
 
 } // namespace pci
@@ -294,6 +302,7 @@ static zx_driver_ops_t pci_device_proxy_driver_ops = {
     .release = nullptr,
 };
 
+// clang-format off
 ZIRCON_DRIVER_BEGIN(pci_device_proxy, pci_device_proxy_driver_ops, "zircon", "0.1", 1)
     BI_ABORT_IF_AUTOBIND,
 ZIRCON_DRIVER_END(pci_device_proxy)

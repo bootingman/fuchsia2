@@ -16,7 +16,7 @@
 
 namespace pci {
 
-class FakeBus : public BusLinkInterface {
+class FakeBus : public BusDeviceInterface {
 public:
     void LinkDevice(fbl::RefPtr<pci::Device> device) final {
         fbl::AutoLock dev_list_lock(&dev_list_lock_);
@@ -28,9 +28,14 @@ public:
         device_list_.erase(*device);
     }
 
+    zx_status_t GetBti(pci_bdf_t, uint32_t index, zx::bti* bti) {
+        return ZX_ERR_NOT_SUPPORTED;
+    }
+
     pci::Device& get_device(pci_bdf_t bdf) {
         return *device_list_.find(bdf);
     }
+
 
     const pci::DeviceList& device_list() { return device_list_; }
 

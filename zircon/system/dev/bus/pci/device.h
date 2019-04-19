@@ -34,7 +34,7 @@ namespace pci {
 
 // UpstreamNode includes device.h, so only forward declare it here.
 class UpstreamNode;
-class BusLinkInterface;
+class BusDeviceInterface;
 
 // A pci::Device represents a given PCI(e) device on a bus. It can be used
 // standalone for a regular PCI(e) device on the bus, or as the base class for a
@@ -114,7 +114,7 @@ public:
     static zx_status_t Create(zx_device_t* parent,
                               fbl::RefPtr<Config>&& config,
                               UpstreamNode* upstream,
-                              BusLinkInterface* bli);
+                              BusDeviceInterface* bli);
     zx_status_t CreateProxy();
     virtual ~Device();
 
@@ -198,14 +198,14 @@ protected:
     Device(zx_device_t* parent,
            fbl::RefPtr<Config>&& config,
            UpstreamNode* upstream,
-           BusLinkInterface* bli,
+           BusDeviceInterface* bdi,
            bool is_bridge)
         : PciDeviceType(parent),
           is_bridge_(is_bridge),
           cfg_(std::move(config)),
           bar_count_(is_bridge ? PCI_BAR_REGS_PER_BRIDGE : PCI_BAR_REGS_PER_DEVICE),
           upstream_(upstream),
-          bli_(bli) {}
+          bdi_(bdi) {}
 
     zx_status_t Init() TA_EXCL(dev_lock_);
     zx_status_t InitLocked() TA_REQ(dev_lock_);
@@ -257,7 +257,7 @@ protected:
 
     // An upstream node will outlive its downstream devices
     UpstreamNode* upstream_; // The upstream node in the device graph.
-    BusLinkInterface* const bli_;
+    BusDeviceInterface* const bdi_;
 
 private:
     zx_status_t RpcReply(const zx::unowned_channel& ch, zx_status_t st,

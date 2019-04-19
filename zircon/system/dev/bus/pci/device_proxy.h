@@ -88,9 +88,7 @@ struct PciRpcMsg {
         PciMsgBar bar;
         PciMsgDeviceInfo info;
         PciMsgCapaility cap;
-        uint8_t data[ZX_PAGE_SIZE - 24u];
         uint32_t bti_index;
-        zx_handle_t handle;
     };
 };
 static_assert(sizeof(PciRpcMsg) <= ZX_PAGE_SIZE);

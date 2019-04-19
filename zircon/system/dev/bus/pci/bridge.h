@@ -28,7 +28,7 @@ public:
     static zx_status_t Create(zx_device_t* parent,
                               fbl::RefPtr<Config>&& config,
                               UpstreamNode* upstream,
-                              BusLinkInterface* bli,
+                              BusDeviceInterface* bdi,
                               uint8_t mbus_id,
                               fbl::RefPtr<pci::Bridge>* out_bridge);
     // Derived device objects need to have refcounting implemented
@@ -67,7 +67,7 @@ private:
     Bridge(zx_device_t* parent,
            fbl::RefPtr<Config>&&,
            UpstreamNode* upstream,
-           BusLinkInterface* bli,
+           BusDeviceInterface* bdi,
            uint8_t managed_bus_id);
     zx_status_t Init() TA_EXCL(dev_lock_);
 

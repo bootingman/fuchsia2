@@ -4,6 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT
 
+#include "bus.h"
 #include "common.h"
 #include "device.h"
 
@@ -178,7 +179,16 @@ zx_status_t Device::RpcGetBar(const zx::unowned_channel& ch) {
 }
 
 zx_status_t Device::RpcGetBti(const zx::unowned_channel& ch) {
-    RPC_UNIMPLEMENTED;
+    zx::bti bti;
+    zx_handle_t handle = ZX_HANDLE_INVALID;
+    uint32_t handle_cnt = 0;
+    zx_status_t st = bdi_->GetBti(cfg_->bdf(), request_.bti_index, &bti);
+    if (st == ZX_OK) {
+        handle = bti.release();
+        handle_cnt++;
+    }
+
+    return RpcReply(ch, ZX_OK, &handle, handle_cnt);
 }
 
 zx_status_t Device::RpcGetDeviceInfo(const zx::unowned_channel& ch) {

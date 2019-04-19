@@ -34,7 +34,7 @@ public:
     static zx_status_t Create(zx_device_t* parent,
                               fbl::RefPtr<Config>&& cfg,
                               UpstreamNode* upstream,
-                              BusLinkInterface* bli);
+                              BusDeviceInterface* bli);
 
     // Implement ref counting, do not let derived classes override.
     PCI_IMPLEMENT_REFCOUNTED;
@@ -46,14 +46,14 @@ protected:
     DeviceImpl(zx_device_t* parent,
                fbl::RefPtr<Config>&& cfg,
                UpstreamNode* upstream,
-               BusLinkInterface* bli)
+               BusDeviceInterface* bli)
         : Device(parent, std::move(cfg), upstream, bli, false) {}
 };
 
 zx_status_t DeviceImpl::Create(zx_device_t* parent,
                                fbl::RefPtr<Config>&& cfg,
                                UpstreamNode* upstream,
-                               BusLinkInterface* bli) {
+                               BusDeviceInterface* bli) {
     fbl::AllocChecker ac;
     auto raw_dev = new (&ac) DeviceImpl(parent, std::move(cfg), upstream, bli);
     if (!ac.check()) {
@@ -115,7 +115,7 @@ zx_status_t Device::CreateProxy() {
 zx_status_t Device::Create(zx_device_t* parent,
                            fbl::RefPtr<Config>&& config,
                            UpstreamNode* upstream,
-                           BusLinkInterface* bli) {
+                           BusDeviceInterface* bli) {
     return DeviceImpl::Create(parent, std::move(config), upstream, bli);
 }
 
@@ -616,7 +616,7 @@ void Device::Unplug() {
     // everything in the command register
     ZX_DEBUG_ASSERT(disabled_);
     upstream_->UnlinkDevice(this);
-    bli_->UnlinkDevice(this);
+    bdi_->UnlinkDevice(this);
     plugged_in_ = false;
     pci_tracef("device [%s] unplugged\n", cfg_->addr());
 }

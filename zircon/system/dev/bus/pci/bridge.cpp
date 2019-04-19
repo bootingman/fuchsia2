@@ -26,19 +26,19 @@ namespace pci {
 Bridge::Bridge(zx_device_t* parent,
                fbl::RefPtr<Config>&& config,
                UpstreamNode* upstream,
-               BusLinkInterface* bli,
+               BusDeviceInterface* bdi,
                uint8_t mbus_id)
-    : pci::Device(parent, std::move(config), upstream, bli, true),
+    : pci::Device(parent, std::move(config), upstream, bdi, true),
       UpstreamNode(UpstreamNode::Type::BRIDGE, mbus_id) {}
 
 zx_status_t Bridge::Create(zx_device_t* parent,
                            fbl::RefPtr<Config>&& config,
                            UpstreamNode* upstream,
-                           BusLinkInterface* bli,
+                           BusDeviceInterface* bdi,
                            uint8_t managed_bus_id,
                            fbl::RefPtr<pci::Bridge>* out_bridge) {
     fbl::AllocChecker ac;
-    auto raw_bridge = new (&ac) Bridge(parent, std::move(config), upstream, bli, managed_bus_id);
+    auto raw_bridge = new (&ac) Bridge(parent, std::move(config), upstream, bdi, managed_bus_id);
     if (!ac.check()) {
         return ZX_ERR_NO_MEMORY;
     }
@@ -50,7 +50,7 @@ zx_status_t Bridge::Create(zx_device_t* parent,
     }
 
     fbl::RefPtr<pci::Device> dev = fbl::AdoptRef(raw_bridge);
-    bli->LinkDevice(dev);
+    bdi->LinkDevice(dev);
     *out_bridge = fbl::RefPtr<Bridge>::Downcast(dev);
     return ZX_OK;
 }

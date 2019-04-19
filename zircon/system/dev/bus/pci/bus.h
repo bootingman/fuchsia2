@@ -20,13 +20,13 @@
 
 namespace pci {
 
-// This interface allows for bridges/devices to add and remove themselves from the
-// device list of their particular bus instance without exposing the rest of the
-// bus's interface to them or using static methods. This becomes more important
-// as multiple bus instances with differing segment groups become a reality.
-class BusLinkInterface {
+// This interface allows for a device to interact with its bus in a limited
+// manner. This becomes more important as multiple bus instances with
+// differing segment groups become a reality.
+class BusDeviceInterface {
 public:
-    virtual ~BusLinkInterface() {}
+    virtual ~BusDeviceInterface() {}
+    virtual zx_status_t GetBti(pci_bdf_t, uint32_t index, zx::bti* bti);
     virtual void LinkDevice(fbl::RefPtr<pci::Device> device) = 0;
     virtual void UnlinkDevice(pci::Device* device) = 0;
 };
@@ -46,12 +46,12 @@ using DeviceList = fbl::WAVLTree<pci_bdf_t,
 class Bus;
 using PciBusType = ddk::Device<Bus>;
 class Bus : public PciBusType,
-            public BusLinkInterface {
+            public BusDeviceInterface {
 public:
     static zx_status_t Create(zx_device_t* parent);
     void DdkRelease();
 
-    // Accessors for the device list, used by BusLinkInterface
+    // Accessors for the device list, used by BusDeviceInterface
     void LinkDevice(fbl::RefPtr<pci::Device> device) final {
         fbl::AutoLock dev_list_lock(&dev_list_lock_);
         device_list_.insert(device);
@@ -60,6 +60,11 @@ public:
     void UnlinkDevice(pci::Device* device) final {
         fbl::AutoLock dev_list_lock(&dev_list_lock_);
         device_list_.erase(*device);
+    }
+
+    zx_status_t GetBti(pci_bdf_t bdf, uint32_t index, zx::bti* bti) {
+        uint32_t u32bdf = (bdf.bus_id << 8) | (bdf.device_id << 3) | bdf.function_id;
+        return pciroot().GetBti(u32bdf, index, bti);
     }
 
 private:
