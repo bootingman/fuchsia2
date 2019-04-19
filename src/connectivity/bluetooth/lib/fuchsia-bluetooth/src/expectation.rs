@@ -94,8 +94,7 @@ pub trait IsAny<T: 'static> {
 }
 
 impl<T: 'static, Elem: 'static> IsAny<T> for AnyPred<T,Elem>
-where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
-    Elem: PartialEq + Debug {
+where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
     fn apply(&self, t: &T) -> bool {
         t.into_iter().any(|i| self.pred.satisfied(i))
     }
@@ -124,9 +123,8 @@ pub trait IsAll<T: 'static> {
     fn falsify(&self, t: &T) -> Option<String>;
 }
 
-impl<T: 'static, Elem> IsAll<T> for AllPred<T,Elem>
-where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
-    Elem: PartialEq + Debug + 'static {
+impl<T: 'static, Elem: Debug + 'static> IsAll<T> for AllPred<T,Elem>
+where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
     fn apply(&self, t: &T) -> bool {
         t.into_iter().all(|i| self.pred.satisfied(i))
     }
@@ -245,20 +243,6 @@ where T: 'static {
     }
 }
 
-impl<Elem, T> Predicate<T>
-where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
-    Elem: PartialEq + Debug + Send + Sync + 'static,
-    T: Send + Sync + 'static {
-
-    pub fn all(pred: Predicate<Elem>) -> Predicate<T> {
-        Predicate::All(Arc::new(AllPred{ pred, _phantom: PhantomData }))
-    }
-
-    pub fn any(pred: Predicate<Elem>) -> Predicate<T> {
-        Predicate::Any(Arc::new(AnyPred{ pred, _phantom: PhantomData }))
-    }
-}
-
 impl<T> Predicate<T> {
     pub fn and(self, rhs: Predicate<T>) -> Predicate<T> {
         Predicate::And(Box::new(self), Box::new(rhs))
@@ -269,15 +253,26 @@ impl<T> Predicate<T> {
     pub fn not(self) -> Predicate<T> {
         Predicate::Not(Box::new(self))
     }
-}
-
-impl<T> Predicate<T> {
     pub fn new<F, S>(f: F, label: S) -> Predicate<T>
     where
         F: Fn(&T) -> bool + Send + Sync + 'static,
         S: Into<String>
     {
         Predicate::Predicate(Arc::new(f), label.into())
+    }
+}
+
+/// Methods to work with `T`s that are some collection of elements `Elem`.
+impl<Elem, T: 'static> Predicate<T>
+where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
+    Elem: Debug + 'static {
+
+    pub fn all(pred: Predicate<Elem>) -> Predicate<T> {
+        Predicate::All(Arc::new(AllPred{ pred, _phantom: PhantomData }))
+    }
+
+    pub fn any(pred: Predicate<Elem>) -> Predicate<T> {
+        Predicate::Any(Arc::new(AnyPred{ pred, _phantom: PhantomData }))
     }
 }
 
