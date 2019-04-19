@@ -22,14 +22,6 @@ pub mod peer;
 #[cfg(test)]
 pub mod test;
 
-/*
-pub struct OldPredicate<T> {
-    inner: Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>,
-    /// A descriptive piece of text used for debug printing via `{:?}`
-    description: String,
-}
-*/
-
 /// A String whose `Debug` implementation pretty-prints
 #[derive(Clone)]
 pub struct AssertionText(String);
@@ -290,86 +282,6 @@ impl<T: Send + Sync + 'static> Predicate<T> {
         }))
     }
 }
-
-/*
-
-impl<T> Clone for OldPredicate<T> {
-    fn clone(&self) -> OldPredicate<T> {
-        OldPredicate { inner: self.inner.clone(), description: self.description.clone() }
-    }
-}
-
-impl<T> Debug for OldPredicate<T> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self.description)
-    }
-}
-
-impl<T: 'static> OldPredicate<T> {
-    pub fn satisfied_(&self, t: &T) -> Result<(),AssertionText> {
-        if (self.inner)(t) {
-            Ok(())
-        } else {
-            Err(AssertionText(self.describe()))
-        }
-    }
-    pub fn satisfied(&self, t: &T) -> bool {
-        (self.inner)(t)
-    }
-    pub fn or(self, rhs: OldPredicate<T>) -> OldPredicate<T> {
-        let description = format!("({}) OR ({})", self.description, rhs.description);
-        OldPredicate {
-            inner: Arc::new(move |t: &T| -> bool { (self.inner)(t) || (rhs.inner)(t) }),
-            description,
-        }
-    }
-    pub fn and(self, rhs: OldPredicate<T>) -> OldPredicate<T> {
-        let description = format!("({}) AND ({})", self.description, rhs.description);
-        OldPredicate {
-            inner: Arc::new(move |t: &T| -> bool { (self.inner)(t) && (rhs.inner)(t) }),
-            description,
-        }
-    }
-    pub fn not(self) -> OldPredicate<T> {
-        let description = format!("NOT ({})", self.description);
-        OldPredicate { inner: Arc::new(move |t: &T| -> bool { !(self.inner)(t) }), description }
-    }
-
-    pub fn new<F>(f: F, label: Option<&str>) -> OldPredicate<T>
-    where
-        F: Fn(&T) -> bool + Send + Sync + 'static,
-    {
-        OldPredicate {
-            inner: Arc::new(f),
-            description: label.unwrap_or("<Unrepresentable OldPredicate>").to_string(),
-        }
-    }
-
-    pub fn describe(&self) -> String {
-        self.description.clone()
-    }
-}
-
-impl<B: 'static> OldPredicate<B> {
-    pub fn over<F, A, S>(self, project: F, path: S) -> OldPredicate<A>
-    where F: Fn(&A) -> B + Send + Sync + 'static,
-          S: Into<String> {
-        let inner = self.inner;
-        let description = self.description;
-        OldPredicate {
-            inner: Arc::new(move |t| (inner)(&project(t))),
-            description: format!("OVER\n\t{}\nEXPECTED\n\t{}", path.into(), description)
-        }
-    }
-}
-
-impl<T: PartialEq + Debug + Send + Sync + 'static> OldPredicate<T> {
-    pub fn equal(expected: T) -> OldPredicate<T> {
-        let description = format!("Equal to {:?}", expected);
-        OldPredicate{ inner: Arc::new(move |t| t == &expected), description }
-    }
-}
-*/
 
 impl<T: 'static> Predicate<T> {
     /*
