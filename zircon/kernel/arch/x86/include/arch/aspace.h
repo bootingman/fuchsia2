@@ -21,7 +21,7 @@
 class X86PageTableMmu final : public X86PageTableBase {
 public:
     // Note that these methods are not virtual!
-    zx_status_t Init(void* ctx);
+    virtual zx_status_t Init(void* ctx);
     void Destroy(vaddr_t base, size_t size);
 
     // Initialize the kernel page table, assigning the given context to it.
@@ -29,8 +29,6 @@ public:
     // the G (global) bit set, and are expected to be aliased across all page
     // tables used in the normal MMU.  See |AliasKernelMappings|.
     zx_status_t InitKernel(void* ctx);
-
-    static constexpr uint64_t kUserPml4Bit = USER_PML4_BIT;
 
     // Returns the physical address of the user version of this address space's
     // PML4.  If PTI is disabled, this is identical to the kernel version.
@@ -55,7 +53,7 @@ private:
     void TlbInvalidate(PendingTlbInvalidation* pending) final;
     uint pt_flags_to_mmu_flags(PtFlags flags, PageTableLevel level) final;
     bool needs_cache_flushes() final { return false; }
-    void Pml4EChanged(size_t idx) final;
+    void Pml4EChanged(size_t idx);
 
     // Used for normal MMU page tables so they can share the high kernel mapping
     zx_status_t AliasKernelMappings();

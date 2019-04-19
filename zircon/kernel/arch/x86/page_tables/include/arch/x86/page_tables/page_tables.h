@@ -93,7 +93,7 @@ public:
 
 protected:
     // Initialize an empty page table, assigning this given context to it.
-    zx_status_t Init(void* ctx);
+    virtual zx_status_t Init(void* ctx) { return ZX_OK; }
 
     // Release the resources associated with this page table.  |base| and |size|
     // are only used for debug checks that the page tables have no more mappings.

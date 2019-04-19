@@ -14,6 +14,7 @@
 #include <arch/x86.h>
 #include <arch/x86/descriptor.h>
 #include <arch/x86/feature.h>
+#include <arch/x86/kpti.h>
 #include <arch/x86/mmu.h>
 #include <arch/x86/mmu_mem_types.h>
 #include <kernel/cmdline.h>
@@ -178,7 +179,8 @@ static void TlbInvalidatePage_task(void* raw_context) {
     if (g_enable_isolation == 1) {
         // Mask out the kPML4 bit, so that we will invalidate from both the
         // kPML4 and the uPML4.
-        cr3 &= ~X86PageTableMmu::kUserPml4Bit;
+        //cr3 &= ~X86PageTableMmu::kUserPml4Bit;
+        cr3 &= ~0x1000;
     }
     if (context->target_cr3 != cr3 && !context->pending->contains_global) {
         /* This invalidation doesn't apply to this CPU, ignore it */
@@ -577,10 +579,16 @@ X86PageTableBase::~X86PageTableBase() {
 
 // We disable analysis due to the write to |pages_| tripping it up.  It is safe
 // to write to |pages_| since this is part of object construction.
-zx_status_t X86PageTableBase::Init(void* ctx) TA_NO_THREAD_SAFETY_ANALYSIS {
+zx_status_t X86PageTableMmu::Init(void* ctx) TA_NO_THREAD_SAFETY_ANALYSIS {
     /* allocate a top level page table for the new address space */
     vm_page* p;
     paddr_t pa;
+    //int pages_needed = 1;
+
+    //if (x86_kpti_is_enabled()) {
+    //  pages_needed = 2;
+    //}
+
     zx_status_t status = pmm_alloc_page(0, &p, &pa);
     if (status != ZX_OK) {
         TRACEF("error allocating top level page directory\n");
@@ -596,6 +604,37 @@ zx_status_t X86PageTableBase::Init(void* ctx) TA_NO_THREAD_SAFETY_ANALYSIS {
     ctx_ = ctx;
     pages_ = 1;
     return ZX_OK;
+}
+
+void X86PageTableMmu::Destroy(vaddr_t base, size_t size) {
+#if LK_DEBUGLEVEL > 1
+    pt_entry_t* table = static_cast<pt_entry_t*>(virt_);
+    uint start = VADDR_TO_PML4_INDEX(base);
+    uint end = VADDR_TO_PML4_INDEX(base + size - 1);
+
+    // Don't check start if that table is shared with another aspace.
+    if (!IS_ALIGNED(base, 1ull << PML4_SHIFT)) {
+        start += 1;
+    }
+    // Do check the end if it fills out the table entry.
+    if (!IS_ALIGNED(base + size, 1ull << PML4_SHIFT)) {
+        end += 1;
+    }
+
+    for (uint i = start; i < end; ++i) {
+        DEBUG_ASSERT(!IS_PAGE_PRESENT(table[i]));
+    }
+#endif
+
+    //list_node pages = LIST_INITIAL_VALUE(pages);
+    //vm_page_t* page = paddr_to_vm_page(phys_);
+    //list_add_tail(&pages, &page->free.node);
+    //if (x86_kpti_is_enabled()) {
+    //    page = paddr_to_vm_page(phys_ + PAGE_SIZE);
+    //    list_add_tail(&pages, &page->free.node);
+   // }
+    //pmm_free(&pages);
+    phys_ = 0;
 }
 
 // We disable analysis due to the write to |pages_| tripping it up.  It is safe
