@@ -18,42 +18,17 @@ mod central_expectation {
     use fuchsia_bluetooth::le::RemoteDevice;
 
     pub fn scan_enabled() -> Predicate<CentralState> {
-        Predicate::new(
-            |state: &CentralState| -> bool {
-                state.scan_state_changes.last() == Some(&ScanStateChange::ScanEnabled)
-            },
-            "Scan was enabled",
-        )
+        Predicate::equal(Some(ScanStateChange::ScanEnabled))
+          .over_value(|state: &CentralState| state.scan_state_changes.last().cloned(), ".scan_state_changes.last()")
     }
-    /*
-    pub fn scan_disabled() -> Predicate<CentralState> {
-        Predicate::new(
-            |state: &CentralState| -> bool {
-                    && state.scan_state_changes.last() == Some(&ScanStateChange::ScanDisabled)
-            },
-            "Scan was disabled",
-        )
-    }
-    */
     pub fn scan_disabled() -> Predicate<CentralState> {
         Predicate::equal(Some(ScanStateChange::ScanDisabled))
           .over_value(|state: &CentralState| state.scan_state_changes.last().cloned(), ".scan_state_changes.last()")
-
-            /*
-            // -or-
-
-        Predicate::over(|state| state.scan_state_changes.last())
-            .equal(Some(ScanStateChange::ScanDisabled))
-
-            // -or-
-
-        focus!( .scan_state_changes.last() )
-            .equal(Some(ScanStateChange::ScanDisabled))
-            */
     }
     pub fn device_found(expected_name: &str) -> Predicate<CentralState> {
         let expected_name = expected_name.to_string();
-        let msg = format!("Peer '{}' has been discovered", expected_name);
+        //let msg = format!("Peer '{}' has been discovered", expected_name);
+        /*
         // TODO(nickpollard) - use 'any' predicate
         // TODO - test with an incorrect value to see what the error is like
         let has_expected_name = move |peer: &RemoteDevice| -> bool {
@@ -71,6 +46,19 @@ mod central_expectation {
             },
             msg,
         )
+        */
+
+        let has_expected_name = Predicate::equal(Some(expected_name))
+            .over_value(|peer: &RemoteDevice| {
+                peer.advertising_data
+                    .as_ref()
+                    .and_then(|ad| ad.name.as_ref().cloned())
+            },
+            ".advertising_data.name"
+            );
+
+        Predicate::any(has_expected_name).over(|state: &CentralState| { &state.remote_devices }, ".remote_devices")
+
     }
 }
 
