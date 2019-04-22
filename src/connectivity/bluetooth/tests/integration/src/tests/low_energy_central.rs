@@ -27,27 +27,6 @@ mod central_expectation {
     }
     pub fn device_found(expected_name: &str) -> Predicate<CentralState> {
         let expected_name = expected_name.to_string();
-        //let msg = format!("Peer '{}' has been discovered", expected_name);
-        /*
-        // TODO(nickpollard) - use 'any' predicate
-        // TODO - test with an incorrect value to see what the error is like
-        let has_expected_name = move |peer: &RemoteDevice| -> bool {
-            peer.advertising_data
-                .as_ref()
-                .and_then(|ad| ad.name.as_ref())
-                .iter()
-                .any(|&name| name == &expected_name)
-        };
-
-        Predicate::new(
-            move |state: &CentralState| -> bool {
-                !state.remote_devices.is_empty()
-                    && state.remote_devices.iter().any(&has_expected_name)
-            },
-            msg,
-        )
-        */
-
         let has_expected_name = Predicate::equal(Some(expected_name))
             .over_value(|peer: &RemoteDevice| {
                 peer.advertising_data
@@ -82,7 +61,7 @@ async fn start_scan(central: &CentralHarness) -> Result<(), Error> {
 pub async fn enable_scan(central: CentralHarness) -> Result<(), Error> {
     await!(start_scan(&central))?;
     let _ = await!(central.when_satisfied(
-        central_expectation::scan_enabled().and(central_expectation::device_found("Fake")),
+        central_expectation::scan_enabled().and(central_expectation::device_found("Fake2")),
         scan_timeout()
     ))?;
     Ok(())

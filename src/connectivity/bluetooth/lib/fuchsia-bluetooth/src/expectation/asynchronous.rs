@@ -142,7 +142,7 @@ where
             ExpectationFuture::new(self.clone(), expectation)
                 .map(|s| Ok(s))
                 .on_timeout(timeout.after_now(), move || {
-                    Err(format_err!("Timed out waiting for expectation: {}", msg))
+                    Err(format_err!("Timed out waiting for expectation: {:?}", msg))
                 }),
         ))
     }

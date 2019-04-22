@@ -31,9 +31,6 @@ impl fmt::Debug for AssertionText {
     }
 }
 
-// A function for producing a pretty-printed Doc
-//type DescFn = Arc<dyn for<'a> Fn(&'a BoxAllocator) -> DocBuilder<'a> + Send + Sync + 'static>;
-
 type CompFn<T> = Arc<dyn Fn(&T, &T) -> bool + Send + Sync + 'static>;
 type ReprFn<T> = Arc<dyn Fn(&T) -> String + Send + Sync + 'static>;
 
@@ -71,7 +68,7 @@ impl<T> Clone for Predicate<T> {
 
 impl<T: 'static> Debug for Predicate<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.describe())
+        self.describe().fmt(f)
     }
 }
 
@@ -112,7 +109,7 @@ where U: 'static {
         self.pred.satisfied((self.project)(t))
     }
     fn describe(&self) -> String {
-        self.pred.describe()
+        self.pred.describe().0
     }
     fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a> {
         self.pred.describe_(alloc)
@@ -140,7 +137,7 @@ where U: 'static {
         self.pred.satisfied(&(self.project)(t))
     }
     fn describe(&self) -> String {
-        self.pred.describe()
+        self.pred.describe().0
     }
     fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a> {
         self.pred.describe_(alloc)
@@ -173,7 +170,7 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
         t.into_iter().any(|i| self.pred.satisfied(i))
     }
     fn describe(&self) -> String {
-        format!("ANY {}", self.pred.describe())
+        format!("ANY {:?}", self.pred.describe())
     }
     fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a> {
         alloc.text("ANY")
@@ -201,7 +198,7 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
         t.into_iter().all(|i| self.pred.satisfied(i))
     }
     fn describe(&self) -> String {
-        format!("ALL {}", self.pred.describe())
+        format!("ALL {:?}", self.pred.describe())
     }
     fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a> {
         alloc.text("ALL")
@@ -241,42 +238,28 @@ where T: 'static {
             Predicate::All(all) => all.apply(t),
         }
     }
-    pub fn describe(&self) -> String {
+    pub fn describe(&self) -> AssertionText {
         let alloc = BoxAllocator;
         let doc = self.describe_(&alloc);
-        format!("{}", doc.1.pretty(80))
+        AssertionText(format!("{}", doc.1.pretty(80)))
     }
-    /*
-    pub fn describe(&self) -> String {
-        match self {
-            Predicate::Equal(expected, _, repr) => format!("EQUAL {}", repr(expected)),
-            Predicate::And(left, right) => format!("({}) AND ({})", left.describe(), right.describe()),
-            Predicate::Or(left, right) => format!("({}) OR ({})", left.describe(), right.describe()),
-            Predicate::Not(inner) => format!("NOT {}", inner.describe()),
-            Predicate::Predicate(_, desc) => desc.clone(),
-            Predicate::Over(over) => format!("{} {}", over.name(), over.describe()),
-            Predicate::Any(any) => any.describe(),
-            Predicate::All(all) => all.describe(),
-        }
-    }
-    */
 
     pub fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a> {
         match self {
             Predicate::Equal(expected, _, repr) => alloc.text(format!("EQUAL {}", repr(expected))),
             Predicate::And(left, right) =>
-                in_parens(alloc, alloc.text(left.describe())).nest(2)
+                in_parens(alloc, alloc.text(left.describe().0)).nest(2)
                 .append(alloc.newline())
                 .append(alloc.text("AND"))
                 .append(alloc.newline())
-                .append(in_parens(alloc, alloc.text(right.describe())).nest(2)),
+                .append(in_parens(alloc, alloc.text(right.describe().0)).nest(2)),
             Predicate::Or(left, right) =>
-                in_parens(alloc, alloc.text(left.describe())).nest(2)
+                in_parens(alloc, alloc.text(left.describe().0)).nest(2)
                 .append(alloc.newline())
                 .append(alloc.text("OR"))
                 .append(alloc.newline())
-                .append(in_parens(alloc, alloc.text(right.describe())).nest(2)),
-            Predicate::Not(inner) => alloc.text("NOT").append(alloc.text(inner.describe()).nest(2)),
+                .append(in_parens(alloc, alloc.text(right.describe().0)).nest(2)),
+            Predicate::Not(inner) => alloc.text("NOT").append(alloc.text(inner.describe().0).nest(2)),
             Predicate::Predicate(_, desc) => alloc.text(desc.clone()),
             Predicate::Over(over) => alloc.text(over.name()).append(alloc.space()).append(over.describe_(alloc)),
             Predicate::Any(any) => any.describe_(alloc),
@@ -313,16 +296,10 @@ where T: 'static {
             Predicate::Not(inner) => {
                 match inner.falsify(t) {
                     Some(_) => None,
-                    None => Some(format!("NOT {}", inner.describe())),
+                    None => Some(format!("NOT {:?}", inner.describe())),
                 }
             },
-            Predicate::Predicate(pred, desc) => {
-                if pred(t) {
-                    None
-                } else {
-                    Some(desc.to_string())
-                }
-            },
+            Predicate::Predicate(pred, desc) => if pred(t) { None } else { Some(desc.to_string()) },
             Predicate::Over(over) => over.falsify(t),
             Predicate::Any(any) => any.falsify(t),
             Predicate::All(all) => all.falsify(t),
@@ -330,7 +307,7 @@ where T: 'static {
     }
     pub fn satisfied_(&self, t: &T) -> Result<(),AssertionText> {
         match self.falsify(t) {
-            Some(falsification) => Err(AssertionText(format!("FAILED EXPECTATION\n\t{}\nFALSIFIED BY\n\t{}", self.describe(), falsification))),
+            Some(falsification) => Err(AssertionText(format!("FAILED EXPECTATION\n\t{:?}\nFALSIFIED BY\n\t{}", self.describe(), falsification))),
             None => Ok(()),
         }
     }
