@@ -37,7 +37,7 @@ mod central_expectation {
     */
     pub fn scan_disabled() -> Predicate<CentralState> {
         Predicate::equal(Some(ScanStateChange::ScanDisabled))
-          .over(|state: &CentralState| &state.scan_state_changes.last().cloned(), ".scan_state_changes.last()")
+          .over_value(|state: &CentralState| state.scan_state_changes.last().cloned(), ".scan_state_changes.last()")
 
             /*
             // -or-

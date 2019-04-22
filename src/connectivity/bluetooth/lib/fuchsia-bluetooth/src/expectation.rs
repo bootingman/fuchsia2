@@ -128,6 +128,34 @@ where U: 'static {
     }
 }
 
+struct OverPredByValue<T, U> {
+    pred: Predicate<U>,
+    project: Arc<dyn Fn(&T) -> U + Send + Sync + 'static>,
+    path: String,
+}
+
+impl<T, U> IsOver<T> for OverPredByValue<T, U>
+where U: 'static {
+    fn apply(&self, t: &T) -> bool {
+        self.pred.satisfied(&(self.project)(t))
+    }
+    fn describe(&self) -> String {
+        self.pred.describe()
+    }
+    fn describe_<'a>(&self, alloc: &'a BoxAllocator) -> DocBuilder<'a> {
+        self.pred.describe_(alloc)
+    }
+    fn name(&self) -> String {
+        self.path.clone()
+    }
+    fn falsify(&self, t: &T) -> Option<String> {
+        match self.pred.falsify(&(self.project)(t)) {
+            Some(s) => Some(format!("{} {}", self.name(), s)),
+            None => None,
+        }
+    }
+}
+
 /// At most how many elements of an iterator to show in a falsification, when falsifying `any` or
 /// `all`
 const MAX_ITER_FALSIFICATIONS: usize = 5;
@@ -346,6 +374,16 @@ impl<U: Send + Sync + 'static> Predicate<U> {
     where F: Fn(&T) -> &U + Send + Sync + 'static,
           S: Into<String> {
         Predicate::Over(Arc::new(OverPred {
+            pred: self,
+            project: Arc::new(project),
+            path: path.into(),
+        }))
+    }
+
+    pub fn over_value<F, T: 'static, S>(self, project: F, path: S) -> Predicate<T>
+    where F: Fn(&T) -> U + Send + Sync + 'static,
+          S: Into<String> {
+        Predicate::Over(Arc::new(OverPredByValue {
             pred: self,
             project: Arc::new(project),
             path: path.into(),
