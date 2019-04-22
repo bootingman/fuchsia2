@@ -138,13 +138,13 @@ pub mod control_expectation {
         let expected_host = Some(id);
         Predicate::new(
             move |state: &ControlState| -> bool { state.active_host == expected_host },
-            Some(&msg),
+            msg,
         )
     }
 
     pub fn host_not_present(id: String) -> Predicate<ControlState> {
         let msg = format!("bt-host {} is no longer present", id);
-        Predicate::new(move |state: &ControlState| !state.hosts.contains_key(&id), Some(&msg))
+        Predicate::new(move |state: &ControlState| !state.hosts.contains_key(&id), msg)
     }
 }
 
@@ -174,7 +174,7 @@ impl ActivatedFakeHost {
                     .iter()
                     .any(|(id, host)| host.address == FAKE_HCI_ADDRESS
                         && !initial_hosts_.contains(id)),
-                Some("At least one fake bt-host device added"),
+                "At least one fake bt-host device added",
             ),
             control_timeout()
         ))?;

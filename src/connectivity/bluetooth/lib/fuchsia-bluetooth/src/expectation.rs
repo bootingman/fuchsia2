@@ -4,6 +4,7 @@
 
 use {
     std::{
+        borrow::Borrow,
         fmt::{self, Debug, Formatter},
         marker::PhantomData,
         sync::Arc,
@@ -40,21 +41,40 @@ type ReprFn<T> = Arc<dyn Fn(&T) -> String + Send + Sync + 'static>;
 /// A Boolean predicate on type `T`. Predicate functions are a boolean algebra
 /// just as raw boolean values are; they an be ANDed, ORed, NOTed. This allows
 /// a clear and concise language for declaring test expectations.
-#[derive(Clone)]
 pub enum Predicate<T> {
-    Equal(T, CompFn<T>, ReprFn<T>),
+    Equal(Arc<T>, CompFn<T>, ReprFn<T>),
     And(Box<Predicate<T>>, Box<Predicate<T>>),
     Or(Box<Predicate<T>>, Box<Predicate<T>>),
     Not(Box<Predicate<T>>),
     Predicate(Arc<dyn Fn(&T) -> bool + Send + Sync + 'static>, String),
     // instead of: Over(Predicate<U>, Fn(&T)->&U) for<U>
-    Over(Arc<dyn IsOver<T> + Send + Sync + 'static>),
+    Over(Arc<dyn IsOver<T> + Send + Sync>),
     // instead of: Any(Fn(&T) -> I, Predicate<I::Elem>) for<I> where I::Elem: Debug
     Any(Arc<dyn IsAny<T> + Send + Sync + 'static>),
     // instead of: All(Fn(&T) -> I, Predicate<I::Elem>) for<I> where I::Elem: Debug
     All(Arc<dyn IsAll<T> + Send + Sync + 'static>),
 }
 
+impl<T> Clone for Predicate<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Predicate::Equal(t, comp, repr) => Predicate::Equal(t.clone(), comp.clone(), repr.clone()),
+            Predicate::And(l, r) => Predicate::And(l.clone(), r.clone()),
+            Predicate::Or(l, r) => Predicate::Or(l.clone(), r.clone()),
+            Predicate::Not(x) => Predicate::Not(x.clone()),
+            Predicate::Predicate(p, msg) => Predicate::Predicate(p.clone(), msg.clone()),
+            Predicate::Over(x) => Predicate::Over(x.clone()),
+            Predicate::Any(x) => Predicate::Any(x.clone()),
+            Predicate::All(x) => Predicate::All(x.clone()),
+        }
+    }
+}
+
+impl<T: 'static> Debug for Predicate<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.describe())
+    }
+}
 
 /// Trait representation of OverPred where `U` is existential
 pub trait IsOver<T> {
@@ -81,15 +101,17 @@ pub trait IsAll<T: 'static> {
     fn falsify(&self, t: &T) -> Option<String>;
 }
 
-struct OverPred<T,U> {
+struct OverPred<T, U, R> {
     pred: Predicate<U>,
-    project: Arc<dyn Fn(&T) -> &U + Send + Sync + 'static>,
+    project: Arc<dyn Fn(&T) -> R + Send + Sync + 'static>,
     path: String,
 }
 
-impl<T, U: 'static> IsOver<T> for OverPred<T,U> {
+impl<T, U, R> IsOver<T> for OverPred<T, U, R>
+where U: 'static,
+      R: Borrow<U> {
     fn apply(&self, t: &T) -> bool {
-        self.pred.satisfied((self.project)(t))
+        self.pred.satisfied((self.project)(t).borrow())
     }
     fn describe(&self) -> String {
         self.pred.describe()
@@ -101,7 +123,7 @@ impl<T, U: 'static> IsOver<T> for OverPred<T,U> {
         self.path.clone()
     }
     fn falsify(&self, t: &T) -> Option<String> {
-        match self.pred.falsify((self.project)(t)) {
+        match self.pred.falsify((self.project)(t).borrow()) {
             Some(s) => Some(format!("{} {}", self.name(), s)),
             None => None,
         }
@@ -170,8 +192,8 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem> {
 }
 
 impl<T: PartialEq + Debug + 'static> Predicate<T> {
-    fn equal(t: T) -> Predicate<T> {
-        Predicate::Equal(t, Arc::new(T::eq), Arc::new(|t| format!("{:?}", t)))
+    pub fn equal(t: T) -> Predicate<T> {
+        Predicate::Equal(Arc::new(t), Arc::new(T::eq), Arc::new(|t| format!("{:?}", t)))
     }
 }
 
@@ -321,15 +343,31 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
     }
 }
 
-impl<T: Send + Sync + 'static> Predicate<T> {
-    pub fn over<F, A: 'static, S>(self, project: F, path: S) -> Predicate<A>
-    where F: Fn(&A) -> &T + Send + Sync + 'static,
+trait IsProject<T,U> {
+    fn apply<F, A>(&self, t: &T, f: F) -> A
+    where F: Fn(&U) -> A;
+}
+
+impl<N,T,U, R> IsProject<T,U> for N
+    where N: Fn(&T) -> R,
+          R: Borrow<U> {
+    fn apply<F, A>(&self, t: &T, f: F) -> A
+    where F: Fn(&U) -> A {
+        f(self(t).borrow())
+    }
+}
+
+impl<U: Send + Sync + 'static> Predicate<U> {
+    pub fn over<F: 'static, T: 'static, S>(self, project: F, path: S) -> Predicate<T>
+    where F: IsProject<T,U>,
           S: Into<String> {
-        Predicate::Over(Arc::new(OverPred {
+        let p = OverPred {
             pred: self,
             project: Arc::new(project),
             path: path.into(),
-        }))
+        };
+        let a: Arc<dyn IsOver<T> + Send + Sync> = Arc::new(p);
+        Predicate::Over(a)
     }
 }
 

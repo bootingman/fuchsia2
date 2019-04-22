@@ -22,7 +22,7 @@ mod central_expectation {
             |state: &CentralState| -> bool {
                 state.scan_state_changes.last() == Some(&ScanStateChange::ScanEnabled)
             },
-            Some("Scan was enabled"),
+            "Scan was enabled",
         )
     }
     /*
@@ -31,17 +31,17 @@ mod central_expectation {
             |state: &CentralState| -> bool {
                     && state.scan_state_changes.last() == Some(&ScanStateChange::ScanDisabled)
             },
-            Some("Scan was disabled"),
+            "Scan was disabled",
         )
     }
     */
     pub fn scan_disabled() -> Predicate<CentralState> {
         Predicate::equal(Some(ScanStateChange::ScanDisabled))
-          .over(|state: &CentralState| state.scan_state_changes.last().cloned(), ".scan_state_changes.last()")
+          .over(|state: &CentralState| &state.scan_state_changes.last().cloned(), ".scan_state_changes.last()")
 
             /*
             // -or-
-        
+
         Predicate::over(|state| state.scan_state_changes.last())
             .equal(Some(ScanStateChange::ScanDisabled))
 
@@ -54,6 +54,8 @@ mod central_expectation {
     pub fn device_found(expected_name: &str) -> Predicate<CentralState> {
         let expected_name = expected_name.to_string();
         let msg = format!("Peer '{}' has been discovered", expected_name);
+        // TODO(nickpollard) - use 'any' predicate
+        // TODO - test with an incorrect value to see what the error is like
         let has_expected_name = move |peer: &RemoteDevice| -> bool {
             peer.advertising_data
                 .as_ref()
@@ -67,7 +69,7 @@ mod central_expectation {
                 !state.remote_devices.is_empty()
                     && state.remote_devices.iter().any(&has_expected_name)
             },
-            Some(&msg),
+            msg,
         )
     }
 }

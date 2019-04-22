@@ -32,7 +32,7 @@ pub async fn set_active_host(control: ControlHarness) -> Result<(), Error> {
                 });
                 added_fake_hosts.count() > 1
             },
-            Some("Both Fake Hosts Added")
+            "Both Fake Hosts Added"
         ),
         control_timeout()
     ))?;
