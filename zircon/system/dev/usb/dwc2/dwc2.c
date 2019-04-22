@@ -168,6 +168,7 @@ static usb_dci_protocol_ops_t dwc_dci_protocol = {
     .cancel_all = dwc_cancel_all
 };
 
+#if 0
 static zx_status_t dwc_set_mode(void* ctx, usb_mode_t mode) {
     dwc_usb_t* dwc = ctx;
     zx_status_t status = ZX_OK;
@@ -203,7 +204,7 @@ static zx_status_t dwc_set_mode(void* ctx, usb_mode_t mode) {
     return ZX_OK;
 
 fail:
-    usb_mode_switch_set_mode(&dwc->ums, USB_MODE_NONE);
+//    usb_mode_switch_set_mode(&dwc->ums, USB_MODE_NONE);
     dwc->usb_mode = USB_MODE_NONE;
 
     return status;
@@ -212,8 +213,9 @@ fail:
 usb_mode_switch_protocol_ops_t dwc_ums_protocol = {
     .set_mode = dwc_set_mode,
 };
+#endif
 
-
+/*
 static zx_status_t dwc_get_protocol(void* ctx, uint32_t proto_id, void* out) {
     switch (proto_id) {
     case ZX_PROTOCOL_USB_DCI: {
@@ -233,7 +235,7 @@ static zx_status_t dwc_get_protocol(void* ctx, uint32_t proto_id, void* out) {
     }
 }
 
-
+*/
 
 static void dwc_unbind(void* ctx) {
     zxlogf(ERROR, "dwc_usb: dwc_unbind not implemented\n");
@@ -245,7 +247,7 @@ static void dwc_release(void* ctx) {
 
 static zx_protocol_device_t dwc_device_proto = {
     .version = DEVICE_OPS_VERSION,
-    .get_protocol = dwc_get_protocol,
+//    .get_protocol = dwc_get_protocol,
     .unbind = dwc_unbind,
     .release = dwc_release,
 };
@@ -270,12 +272,13 @@ static zx_status_t dwc_bind(void* ctx, zx_device_t* dev) {
         free(dwc);
         return status;
     }
-
+/*
     status = device_get_protocol(dev, ZX_PROTOCOL_USB_MODE_SWITCH, &dwc->ums);
     if (status != ZX_OK) {
         free(dwc);
         return status;
     }
+*/
 
     // hack for astro USB tuning (also optional)
 //    device_get_protocol(dev, ZX_PROTOCOL_ASTRO_USB, &dwc->astro_usb);
@@ -302,7 +305,7 @@ static zx_status_t dwc_bind(void* ctx, zx_device_t* dev) {
     }
 
     dwc->parent = dev;
-    dwc->usb_mode = USB_MODE_NONE;
+//    dwc->usb_mode = USB_MODE_NONE;
 
 //    if (dwc->astro_usb.ops) {
 //        astro_usb_do_usb_tuning(&dwc->astro_usb, false, true);
@@ -315,6 +318,11 @@ static zx_status_t dwc_bind(void* ctx, zx_device_t* dev) {
 
     if ((status = usb_dwc_setupcontroller(dwc)) != ZX_OK) {
         zxlogf(ERROR, "usb_dwc: failed setup controller.\n");
+        goto error_return;
+    }
+
+    if ((status = dwc_irq_start(dwc)) != ZX_OK) {
+        zxlogf(ERROR, "usb_dwc: dwc_irq_start failed\n");
         goto error_return;
     }
 

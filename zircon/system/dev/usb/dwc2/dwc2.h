@@ -87,9 +87,8 @@ typedef struct {
     zx_device_t* parent;
 
     pdev_protocol_t pdev;
-    usb_mode_switch_protocol_t ums;
-
-    usb_mode_t usb_mode;
+//    usb_mode_switch_protocol_t ums;
+//    usb_mode_t usb_mode;
 
     mmio_buffer_t mmio;
     dwc_regs_t* regs;
