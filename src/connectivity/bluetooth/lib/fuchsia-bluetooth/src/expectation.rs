@@ -4,7 +4,6 @@
 
 use {
     std::{
-        borrow::Borrow,
         fmt::{self, Debug, Formatter},
         marker::PhantomData,
         sync::Arc,
@@ -101,17 +100,16 @@ pub trait IsAll<T: 'static> {
     fn falsify(&self, t: &T) -> Option<String>;
 }
 
-struct OverPred<T, U, R> {
+struct OverPred<T, U> {
     pred: Predicate<U>,
-    project: Arc<dyn Fn(&T) -> R + Send + Sync + 'static>,
+    project: Arc<dyn Fn(&T) -> &U + Send + Sync + 'static>,
     path: String,
 }
 
-impl<T, U, R> IsOver<T> for OverPred<T, U, R>
-where U: 'static,
-      R: Borrow<U> {
+impl<T, U> IsOver<T> for OverPred<T, U>
+where U: 'static {
     fn apply(&self, t: &T) -> bool {
-        self.pred.satisfied((self.project)(t).borrow())
+        self.pred.satisfied((self.project)(t))
     }
     fn describe(&self) -> String {
         self.pred.describe()
@@ -123,7 +121,7 @@ where U: 'static,
         self.path.clone()
     }
     fn falsify(&self, t: &T) -> Option<String> {
-        match self.pred.falsify((self.project)(t).borrow()) {
+        match self.pred.falsify((self.project)(t)) {
             Some(s) => Some(format!("{} {}", self.name(), s)),
             None => None,
         }
@@ -343,33 +341,18 @@ where for<'a> &'a T: IntoIterator<Item = &'a Elem>,
     }
 }
 
-trait IsProject<T,U> {
-    fn apply<F, A>(&self, t: &T, f: F) -> A
-    where F: Fn(&U) -> A;
-}
-
-impl<N,T,U, R> IsProject<T,U> for N
-    where N: Fn(&T) -> R,
-          R: Borrow<U> {
-    fn apply<F, A>(&self, t: &T, f: F) -> A
-    where F: Fn(&U) -> A {
-        f(self(t).borrow())
-    }
-}
-
 impl<U: Send + Sync + 'static> Predicate<U> {
-    pub fn over<F: 'static, T: 'static, S>(self, project: F, path: S) -> Predicate<T>
-    where F: IsProject<T,U>,
+    pub fn over<F, T: 'static, S>(self, project: F, path: S) -> Predicate<T>
+    where F: Fn(&T) -> &U + Send + Sync + 'static,
           S: Into<String> {
-        let p = OverPred {
+        Predicate::Over(Arc::new(OverPred {
             pred: self,
             project: Arc::new(project),
             path: path.into(),
-        };
-        let a: Arc<dyn IsOver<T> + Send + Sync> = Arc::new(p);
-        Predicate::Over(a)
+        }))
     }
 }
+
 
 #[macro_export]
 macro_rules! focus {
