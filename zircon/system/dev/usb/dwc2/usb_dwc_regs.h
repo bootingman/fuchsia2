@@ -83,33 +83,6 @@ public:
     static auto Get() { return hwreg::RegisterAddr<GRSTCTL>(0x10); }
 };
 
-union dwc_grstctl_t {
-    uint32_t val;
-    struct {
-	    /* Core Soft Reset */
-		uint32_t csftrst    : 1;
-		/* Hclk Soft Reset */
-		uint32_t hsftrst    : 1;
-		/* Host Frame Counter Reset */
-		uint32_t hstfrm     : 1;
-		/* In Token Sequence Learning Queue Flush */
-		uint32_t intknqflsh : 1;
-		/* RxFIFO Flush */
-		uint32_t rxfflsh    : 1;
-		/* TxFIFO Flush */
-		uint32_t txfflsh    : 1;
-		/* TxFIFO Number */
-		uint32_t txfnum     : 5;
-		uint32_t reserved   : 19;
-		/* DMA Request Signal */
-		uint32_t dmareq     : 1;
-		/* AHB Master Idle */
-		uint32_t ahbidle    : 1;
-    };
-    dwc_grstctl_t(volatile dwc_grstctl_t& r) { val = r.val; }
-    dwc_grstctl_t() { val = 0; }
-};
-
 class GINITSTS : public hwreg::RegisterBase<GINITSTS, uint32_t, hwreg::EnablePrinter> {
 public:
     DEF_BIT(0, curmode);
@@ -674,7 +647,7 @@ typedef volatile struct {
     // Core USB Configuration Register
     uint32_t gusbcfg;
     // Core Reset Register
-    dwc_grstctl_t grstctl;
+    uint32_t grstctl;
     // Core Interrupt Register
     dwc_interrupts_t gintsts;
     // Core Interrupt Mask Register

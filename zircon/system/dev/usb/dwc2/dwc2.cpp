@@ -11,19 +11,18 @@
 #include <usb/usb-request.h>
 
 static zx_status_t usb_dwc_softreset_core(dwc_usb_t* dwc) {
-    dwc_regs_t* regs = dwc->regs;
-
 /* do we need this? */
-    while (regs->grstctl.ahbidle == 0) {    
+    auto grstctl = GRSTCTL::Get();
+    while (grstctl.ReadFrom(dwc->mmio()).ahbidle() == 0) {
         usleep(1000);
     }
 
 //    dwc_grstctl_t grstctl = {0};
 //    grstctl.csftrst = 1;
-    regs->grstctl.csftrst = 1;
+    GRSTCTL::Get().ReadFrom(dwc->mmio()).set_csftrst(1).WriteTo(dwc->mmio());
 
     for (int i = 0; i < 1000; i++) {
-        if (regs->grstctl.csftrst == 0) {
+        if (grstctl.ReadFrom(dwc->mmio()).csftrst() == 0) {
             usleep(10 * 1000);
             return ZX_OK;
         }
@@ -58,7 +57,7 @@ printf("did regs->gahbcfg.dmaenable\n");
 
 	dwc_flush_fifo(dwc, 0x10);
 
-	regs->grstctl.intknqflsh = 1;
+    GRSTCTL::Get().ReadFrom(dwc->mmio()).set_intknqflsh(1).WriteTo(dwc->mmio());
 
 	/* Clear all pending Device Interrupts */
 	regs->diepmsk.val = 0;

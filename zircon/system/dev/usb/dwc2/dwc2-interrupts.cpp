@@ -260,20 +260,18 @@ static void dwc_handle_ep0(dwc_usb_t* dwc) {
 }
 
 void dwc_flush_fifo(dwc_usb_t* dwc, const int num) {
-    dwc_regs_t* regs = dwc->regs;
+    auto grstctl = GRSTCTL::Get().ReadFrom(dwc->mmio());
 
-    dwc_grstctl_t grstctl;
-
-	grstctl.txfflsh = 1;
-	grstctl.txfnum = num & 0x1f;
-	regs->grstctl.val = grstctl.val;
+	grstctl.set_txfflsh(1);
+	grstctl.set_txfnum(num);
+	grstctl.WriteTo(dwc->mmio());
 	
     uint32_t count = 0;
 	do {
-	    grstctl.val = regs->grstctl.val;
+	    grstctl.ReadFrom(dwc->mmio());
 		if (++count > 10000)
 			break;
-	} while (grstctl.txfflsh == 1);
+	} while (grstctl.txfflsh() == 1);
 
     zx_nanosleep(zx_deadline_after(ZX_USEC(1)));
 
@@ -281,16 +279,14 @@ void dwc_flush_fifo(dwc_usb_t* dwc, const int num) {
 		return;
     }
 
-    grstctl.val = 0;
-	grstctl.rxfflsh = 1;
-	regs->grstctl.val = grstctl.val;
+    grstctl.set_reg_value(0).set_rxfflsh(1).WriteTo(dwc->mmio());
 
 	count = 0;
 	do {
-	    grstctl.val = regs->grstctl.val;
+	    grstctl.ReadFrom(dwc->mmio());
 		if (++count > 10000)
 			break;
-	} while (grstctl.rxfflsh == 1);
+	} while (grstctl.txfflsh() == 1);
 
     zx_nanosleep(zx_deadline_after(ZX_USEC(1)));
 }
@@ -322,7 +318,7 @@ static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
 	dwc_flush_fifo(dwc, 0);
 
 	/* Flush the Learning Queue */
-	regs->grstctl.intknqflsh = 1;
+    GRSTCTL::Get().ReadFrom(dwc->mmio()).set_intknqflsh(1).WriteTo(dwc->mmio());
 
     // EPO IN and OUT
 	regs->daintmsk = (1 < DWC_EP_IN_SHIFT) | (1 < DWC_EP_OUT_SHIFT);
