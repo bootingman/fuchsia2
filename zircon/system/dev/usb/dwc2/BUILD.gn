@@ -4,9 +4,9 @@
 
 driver("dwc2") {
   sources = [
-    "dwc2.c",
-    "dwc2-endpoints.c",
-    "dwc2-interrupts.c",
+    "dwc2.cpp",
+    "dwc2-endpoints.cpp",
+    "dwc2-interrupts.cpp",
   ]
   deps = [
     "$zx/system/banjo/ddk-protocol-platform-device",
