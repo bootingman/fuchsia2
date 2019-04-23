@@ -22,6 +22,7 @@
 #include <ddk/protocol/usb/dci.h>
 #include <ddk/protocol/usb/modeswitch.h>
 #include <ddk/protocol/usb.h>
+#include <lib/mmio/mmio.h>
 
 // Zircon USB includes
 #include <zircon/hw/usb.h>
@@ -90,8 +91,13 @@ typedef struct {
 //    usb_mode_switch_protocol_t ums;
 //    usb_mode_t usb_mode;
 
-    mmio_buffer_t mmio;
+    std::optional<ddk::MmioBuffer> mmio_;
     dwc_regs_t* regs;
+
+    inline ddk::MmioBuffer* mmio() {
+        return &*mmio_;
+    }
+
 
     // device stuff
     dwc_endpoint_t eps[DWC_MAX_EPS];

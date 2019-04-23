@@ -6,6 +6,8 @@
 
 #include <ddk/binding.h>
 #include <ddk/protocol/platform-device-lib.h>
+#include <ddktl/pdev.h>
+#include <ddktl/protocol/platform/device.h>
 #include <usb/usb-request.h>
 
 static zx_status_t usb_dwc_softreset_core(dwc_usb_t* dwc) {
@@ -33,13 +35,14 @@ static zx_status_t usb_dwc_softreset_core(dwc_usb_t* dwc) {
 static zx_status_t usb_dwc_setupcontroller(dwc_usb_t* dwc) {
     dwc_regs_t* regs = dwc->regs;
 
-    regs->gusbcfg.force_dev_mode = 1;
-	regs->gahbcfg.dmaenable = 0;
+    GUSBCFG::Get().ReadFrom(dwc->mmio()).set_force_dev_mode(1).WriteTo(dwc->mmio());
+    GAHBCFG::Get().ReadFrom(dwc->mmio()).set_dmaenable(0).WriteTo(dwc->mmio());
+printf("did regs->gahbcfg.dmaenable\n");
 
-#if 1 // astro
-	regs->gusbcfg.usbtrdtim = 9;
+#if 0 // astro
+    GUSBCFG::Get().ReadFrom(dwc->mmio()).set_usbtrdtim(9).WriteTo(dwc->mmio());
 #else
-	regs->gusbcfg.usbtrdtim = 5;
+    GUSBCFG::Get().ReadFrom(dwc->mmio()).set_usbtrdtim(5).WriteTo(dwc->mmio());
 #endif
 
     regs->dctl.sftdiscon = 1;
@@ -103,7 +106,7 @@ zxlogf(LINFO, "enabling interrupts %08x\n", gintmsk.val);
 
     regs->gintmsk.val = gintmsk.val;
 
-    regs->gahbcfg.glblintrmsk = 1;
+    GAHBCFG::Get().ReadFrom(dwc->mmio()).set_glblintrmsk(1).WriteTo(dwc->mmio());
 
     return ZX_OK;
 }
@@ -301,12 +304,14 @@ static zx_status_t dwc_bind(void* ctx, zx_device_t* dev) {
     args.proto_id = ZX_PROTOCOL_USB_DCI;
     args.proto_ops = &dwc_dci_protocol;
 
-    status = pdev_map_mmio_buffer(&dwc->pdev, MMIO_INDEX, ZX_CACHE_POLICY_UNCACHED_DEVICE, &dwc->mmio);
+    ddk::PDev pdev_(&dwc->pdev);
+
+    status = pdev_.MapMmio(0, &dwc->mmio_);
     if (status != ZX_OK) {
         zxlogf(ERROR, "usb_dwc: pdev_map_mmio_buffer failed\n");
         goto error_return;
     }
-    dwc->regs = static_cast<dwc_regs_t*>(dwc->mmio.vaddr);
+    dwc->regs = static_cast<dwc_regs_t*>(dwc->mmio_->get());
 
     status = pdev_get_bti(&dwc->pdev, 0, &dwc->bti_handle);
     if (status != ZX_OK) {

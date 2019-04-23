@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <hwreg/bitfields.h>
 #include <zircon/hw/usb.h>
 
 #define MAX_EPS_CHANNELS 16
@@ -25,56 +26,63 @@
 #define DWC_REG_DATA_FIFO_START 0x1000
 #define DWC_REG_DATA_FIFO(regs, ep)	((volatile uint32_t*)((uint8_t*)regs + (ep + 1) * 0x1000))
 
-typedef union {
-    uint32_t val;
-    struct {
-		uint32_t glblintrmsk                : 1;
-		uint32_t hburstlen                  : 4;
-		uint32_t dmaenable                  : 1;
-		uint32_t reserved                   : 1;
-		uint32_t nptxfemplvl_txfemplvl      : 1;
-		uint32_t ptxfemplvl                 : 1;
-		uint32_t reserved2                  : 12;
-		uint32_t remmemsupp                 : 1;
-		uint32_t notialldmawrit             : 1;
-		uint32_t AHBSingle                  : 1;
-		uint32_t reserved3                  : 8;
-	};
-} dwc_gahbcfg_t;
+class GAHBCFG : public hwreg::RegisterBase<GAHBCFG, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, glblintrmsk);
+    DEF_FIELD(4, 1, hburstlen);
+    DEF_BIT(5, dmaenable);
+    DEF_BIT(7, nptxfemplvl_txfemplvl);
+    DEF_BIT(8, ptxfemplvl);
+    DEF_BIT(21, remmemsupp);
+    DEF_BIT(22, notialldmawrit);
+    DEF_BIT(23, AHBSingle);
+    static auto Get() { return hwreg::RegisterAddr<GAHBCFG>(0x8); }
+};
 
-typedef union {
-    uint32_t val;
-    struct {
-        uint32_t toutcal                    : 3;
-        uint32_t phyif                      : 1;
-        uint32_t ulpi_utmi_sel              : 1;
-        uint32_t fsintf                     : 1;
-        uint32_t physel                     : 1;
-        uint32_t ddrsel                     : 1;
-        uint32_t srpcap                     : 1;
-        uint32_t hnpcap                     : 1;
-        uint32_t usbtrdtim                  : 4;
-        uint32_t reserved1                  : 1;
-        uint32_t phylpwrclksel              : 1;
-        uint32_t otgutmifssel               : 1;
-        uint32_t ulpi_fsls                  : 1;
-        uint32_t ulpi_auto_res              : 1;
-        uint32_t ulpi_clk_sus_m             : 1;
-        uint32_t ulpi_ext_vbus_drv          : 1;
-        uint32_t ulpi_int_vbus_indicator    : 1;
-        uint32_t term_sel_dl_pulse          : 1;
-        uint32_t indicator_complement       : 1;
-        uint32_t indicator_pass_through     : 1;
-        uint32_t ulpi_int_prot_dis          : 1;
-        uint32_t ic_usb_cap                 : 1;
-        uint32_t ic_traffic_pull_remove     : 1;
-        uint32_t tx_end_delay               : 1;
-        uint32_t force_host_mode            : 1;
-        uint32_t force_dev_mode             : 1;
-        uint32_t reserved31                 : 1;
-    };
-} dwc_gusbcfg_t;
-    
+class GUSBCFG : public hwreg::RegisterBase<GUSBCFG, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(2, 0, toutcal);
+    DEF_BIT(3, phyif);
+    DEF_BIT(4, ulpi_utmi_sel);
+    DEF_BIT(5, fsintf);
+    DEF_BIT(6, physel);
+    DEF_BIT(7, ddrsel);
+    DEF_BIT(8, srpcap);
+    DEF_BIT(9, hnpcap);
+    DEF_FIELD(13, 10, usbtrdtim);
+    DEF_BIT(15, phylpwrclksel);
+    DEF_BIT(16, otgutmifssel);
+    DEF_BIT(17, ulpi_fsls);
+    DEF_BIT(18, ulpi_auto_res);
+    DEF_BIT(19, ulpi_clk_sus_m);
+    DEF_BIT(20, ulpi_ext_vbus_drv);
+    DEF_BIT(21, ulpi_int_vbus_indicator);
+    DEF_BIT(22, term_sel_dl_pulse);
+    DEF_BIT(23, indicator_complement);
+    DEF_BIT(24, indicator_pass_through);
+    DEF_BIT(25, ulpi_int_prot_dis);
+    DEF_BIT(26, ic_usb_cap);
+    DEF_BIT(27, ic_traffic_pull_remove);
+    DEF_BIT(28, tx_end_delay);
+    DEF_BIT(29, force_host_mode);
+    DEF_BIT(30, force_dev_mode);
+    static auto Get() { return hwreg::RegisterAddr<GUSBCFG>(0xC); }
+};
+
+class GRSTCTL : public hwreg::RegisterBase<GRSTCTL, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, csftrst);
+    DEF_BIT(1, hsftrst);
+    DEF_BIT(2, hstfrm);
+    DEF_BIT(3, intknqflsh);
+    DEF_BIT(4, rxfflsh);
+    DEF_BIT(5, txfflsh);
+    DEF_FIELD(10, 6, txfnum);
+    DEF_BIT(30, dmareq);
+    DEF_BIT(31, ahbidle);
+    static auto Get() { return hwreg::RegisterAddr<GRSTCTL>(0x10); }
+};
+
 union dwc_grstctl_t {
     uint32_t val;
     struct {
@@ -100,6 +108,80 @@ union dwc_grstctl_t {
     };
     dwc_grstctl_t(volatile dwc_grstctl_t& r) { val = r.val; }
     dwc_grstctl_t() { val = 0; }
+};
+
+class GINITSTS : public hwreg::RegisterBase<GINITSTS, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, curmode);
+    DEF_BIT(1, modemismatch);
+    DEF_BIT(2, otgintr);
+    DEF_BIT(3, sof_intr);
+    DEF_BIT(4, rxstsqlvl);
+    DEF_BIT(5, nptxfempty);
+    DEF_BIT(6, ginnakeff);
+    DEF_BIT(7, goutnakeff);
+    DEF_BIT(8, ulpickint);
+    DEF_BIT(9, i2cintr);
+    DEF_BIT(10, erlysuspend);
+    DEF_BIT(11, usbsuspend);
+    DEF_BIT(12, usbreset);
+    DEF_BIT(13, enumdone);
+    DEF_BIT(14, isooutdrop);
+    DEF_BIT(15, eopframe);
+    DEF_BIT(16, restoredone);
+    DEF_BIT(17, epmismatch);
+    DEF_BIT(18, inepintr);
+    DEF_BIT(19, outepintr);
+    DEF_BIT(20, incomplisoin);
+    DEF_BIT(21, incomplisoout);
+    DEF_BIT(22, fetsusp);
+    DEF_BIT(23, resetdet);
+    DEF_BIT(24, port_intr);
+    DEF_BIT(25, host_channel_intr);
+    DEF_BIT(26, ptxfempty);
+    DEF_BIT(27, lpmtranrcvd);
+    DEF_BIT(28, conidstschng);
+    DEF_BIT(29, disconnect);
+    DEF_BIT(30, sessreqintr);
+    DEF_BIT(31, wkupintr);
+    static auto Get() { return hwreg::RegisterAddr<GINITSTS>(0x14); }
+};
+
+class GINITMSK : public hwreg::RegisterBase<GINITMSK, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, curmode);
+    DEF_BIT(1, modemismatch);
+    DEF_BIT(2, otgintr);
+    DEF_BIT(3, sof_intr);
+    DEF_BIT(4, rxstsqlvl);
+    DEF_BIT(5, nptxfempty);
+    DEF_BIT(6, ginnakeff);
+    DEF_BIT(7, goutnakeff);
+    DEF_BIT(8, ulpickint);
+    DEF_BIT(9, i2cintr);
+    DEF_BIT(10, erlysuspend);
+    DEF_BIT(11, usbsuspend);
+    DEF_BIT(12, usbreset);
+    DEF_BIT(13, enumdone);
+    DEF_BIT(14, isooutdrop);
+    DEF_BIT(15, eopframe);
+    DEF_BIT(16, restoredone);
+    DEF_BIT(17, epmismatch);
+    DEF_BIT(18, inepintr);
+    DEF_BIT(19, outepintr);
+    DEF_BIT(20, incomplisoin);
+    DEF_BIT(21, incomplisoout);
+    DEF_BIT(22, fetsusp);
+    DEF_BIT(23, resetdet);
+    DEF_BIT(24, port_intr);
+    DEF_BIT(25, host_channel_intr);
+    DEF_BIT(26, ptxfempty);
+    DEF_BIT(27, lpmtranrcvd);
+    DEF_BIT(28, conidstschng);
+    DEF_BIT(29, disconnect);
+    DEF_BIT(30, sessreqintr);
+    DEF_BIT(31, wkupintr);
+    static auto Get() { return hwreg::RegisterAddr<GINITMSK>(0x18); }
 };
 
 union dwc_interrupts_t {
@@ -142,6 +224,16 @@ union dwc_interrupts_t {
     dwc_interrupts_t() { val = 0; }
 };
 
+class GRXSTSP : public hwreg::RegisterBase<GRXSTSP, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(3, 0, epnum);
+    DEF_FIELD(14, 4, bcnt);
+    DEF_FIELD(16, 15, dpid);
+    DEF_FIELD(20, 17, pktsts);
+    DEF_FIELD(24, 21, fn);
+    static auto Get() { return hwreg::RegisterAddr<GRXSTSP>(0x20); }
+};
+
 union dwc_grxstsp_t {
     uint32_t val;
     struct {
@@ -158,6 +250,25 @@ union dwc_grxstsp_t {
     	uint32_t reserved   : 7;
     };
     dwc_grxstsp_t(volatile dwc_grxstsp_t& r) { val = r.val; }
+};
+
+class DEPCTL : public hwreg::RegisterBase<DEPCTL, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(10, 0, mps);
+    DEF_FIELD(14, 11, nextep);
+    DEF_BIT(15, usbactep);
+    DEF_BIT(16, dpid);
+    DEF_BIT(17, naksts);
+    DEF_FIELD(19, 18, eptype);
+    DEF_BIT(20, snp);
+    DEF_BIT(21, stall);
+    DEF_FIELD(25, 22, txfnum);
+    DEF_BIT(26, cnak);
+    DEF_BIT(27, snak);
+    DEF_BIT(28, setd0pid);
+    DEF_BIT(29, setd1pid);
+    DEF_BIT(30, epdis);
+    DEF_BIT(31, epena);
 };
 
 union dwc_depctl_t {
@@ -186,6 +297,13 @@ union dwc_depctl_t {
     dwc_depctl_t(volatile dwc_depctl_t& r) { val = r.val; }
 };
 
+class DEPTSIZ : public hwreg::RegisterBase<DEPTSIZ, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(18, 0, xfersize);
+    DEF_FIELD(28, 19, pktcnt);
+    DEF_FIELD(30, 29, mc);
+};
+
 union dwc_deptsiz_t {
 	uint32_t val;
 	struct {
@@ -200,7 +318,14 @@ union dwc_deptsiz_t {
     dwc_deptsiz_t(volatile dwc_deptsiz_t& r) { val = r.val; }
 };
 
-typedef union {
+class DEPTSIZ0 : public hwreg::RegisterBase<DEPTSIZ0, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(6, 0, xfersize);
+    DEF_FIELD(20, 19, pktcnt);
+    DEF_FIELD(30, 29, supcnt);
+};
+
+union dwc_deptsiz0_t {
 	uint32_t val;
 	struct {
 		/* Transfer size */
@@ -213,7 +338,21 @@ typedef union {
 		uint32_t supcnt     : 2;
 		uint32_t reserved3  : 1;
 	};
-} dwc_deptsiz0_t;
+};
+
+class DIEPINT : public hwreg::RegisterBase<DIEPINT, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, xfercompl);
+    DEF_BIT(1, epdisabled);
+    DEF_BIT(2, ahberr);
+    DEF_BIT(3, timeout);
+    DEF_BIT(4, intktxfemp);
+    DEF_BIT(5, intknepmis);
+    DEF_BIT(6, inepnakeff);
+    DEF_BIT(8, txfifoundrn);
+    DEF_BIT(9, bna);
+    DEF_BIT(13, nak);
+};
 
 union dwc_diepint_t {
 	uint32_t val;
@@ -243,6 +382,24 @@ union dwc_diepint_t {
 	};
     dwc_diepint_t(volatile dwc_diepint_t& r) { val = r.val; }
     dwc_diepint_t() { val = 0; }
+};
+
+class DOEPINT : public hwreg::RegisterBase<DOEPINT, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, xfercompl);
+    DEF_BIT(1, epdisabled);
+    DEF_BIT(2, ahberr);
+    DEF_BIT(3, setup);
+    DEF_BIT(4, outtknepdis);
+    DEF_BIT(5, stsphsercvd);
+    DEF_BIT(6, back2backsetup);
+    DEF_BIT(8, outpkterr);
+    DEF_BIT(9, bna);
+    DEF_BIT(11, pktdrpsts);
+    DEF_BIT(12, babble);
+    DEF_BIT(13, nak);
+    DEF_BIT(14, nyet);
+    DEF_BIT(15, sr);
 };
 
 union dwc_doepint_t {
@@ -284,6 +441,20 @@ union dwc_doepint_t {
     dwc_doepint_t() { val = 0; }
 };
 
+class DCFG : public hwreg::RegisterBase<DCFG, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(1, 0, devspd);
+    DEF_BIT(2, nzstsouthshk);
+    DEF_BIT(3, ena32khzs);
+    DEF_FIELD(10, 4, devaddr);
+    DEF_FIELD(12, 11, perfrint);
+    DEF_BIT(13, endevoutnak);
+    DEF_FIELD(22, 18, epmscnt);
+    DEF_BIT(23, descdma);
+    DEF_FIELD(25, 24, perschintvl);
+    DEF_FIELD(31, 26, resvalid);
+};
+
 typedef union {
     uint32_t val;
     struct {
@@ -300,6 +471,25 @@ typedef union {
         uint32_t resvalid       : 6;
     };
 } dwc_dcfg_t;
+
+class DCTL : public hwreg::RegisterBase<DCTL, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, rmtwkupsig);
+    DEF_BIT(1, sftdiscon);
+    DEF_BIT(2, gnpinnaksts);
+    DEF_BIT(3, goutnaksts);
+    DEF_FIELD(6, 4, tstctl);
+    DEF_BIT(7, sgnpinnak);
+    DEF_BIT(8, cgnpinnak);
+    DEF_BIT(9, sgoutnak);
+    DEF_BIT(10, cgoutnak);
+    DEF_BIT(11, pwronprgdone);
+    DEF_FIELD(14, 13, gmc);
+    DEF_BIT(15, ifrmnum);
+    DEF_BIT(16, nakonbble);
+    DEF_BIT(17, encontonbna);
+    DEF_BIT(18, besl_reject);
+};
 
 typedef union {
     uint32_t val;
@@ -340,6 +530,14 @@ typedef union {
     };
 } dwc_dctl_t;
 
+class DSTS : public hwreg::RegisterBase<DSTS, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, suspsts);
+    DEF_FIELD(2, 1, enumspd);
+    DEF_BIT(3, errticerr);
+    DEF_FIELD(21, 8, soffn);
+};
+
 typedef union {
     uint32_t val;
     struct {
@@ -355,6 +553,7 @@ typedef union {
         uint32_t reserved2  : 10;
     };
 } dwc_dsts_t;
+
 
 typedef struct {
 	/* Device IN Endpoint Control Register */
@@ -425,6 +624,15 @@ typedef union {
 	};
 } dwc_pcgcctl_t;
 
+class GNPTXSTS : public hwreg::RegisterBase<GNPTXSTS, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(15, 0, nptxfspcavail);
+    DEF_FIELD(23, 16, nptxqspcavail);
+    DEF_BIT(24, nptxqtop_terminate);
+    DEF_FIELD(26, 25, nptxqtop_token);
+    DEF_FIELD(30, 27, nptxqtop_chnep);
+};
+
 union dwc_gnptxsts_t {
     uint32_t val;
     struct {
@@ -462,9 +670,9 @@ typedef volatile struct {
     // OTG Interrupt Register
     uint32_t gotgint;
     // Core AHB Configuration Register
-    dwc_gahbcfg_t gahbcfg;
+    uint32_t gahbcfg;
     // Core USB Configuration Register
-    dwc_gusbcfg_t gusbcfg;
+    uint32_t gusbcfg;
     // Core Reset Register
     dwc_grstctl_t grstctl;
     // Core Interrupt Register

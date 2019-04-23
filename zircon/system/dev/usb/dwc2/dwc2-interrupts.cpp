@@ -42,7 +42,7 @@ static void dwc2_ep0_out_start(dwc_usb_t* dwc)  {
 
     dwc_regs_t* regs = dwc->regs;
 
-	dwc_deptsiz0_t doeptsize0 = { .val = 0 };
+	dwc_deptsiz0_t doeptsize0;
 //	dwc_depctl_t doepctl = {};
 
 	doeptsize0.supcnt = 3;
@@ -394,10 +394,11 @@ static void dwc_handle_enumdone_irq(dwc_usb_t* dwc) {
     regs->dctl.cgnpinnak = 1;
 
 	/* high speed */
-#if 1 // astro
+#if 0 // astro
+    GUSBCFG::Get().ReadFrom(dwc->mmio).set_usbtrdtim(9).WriteTo(dwc->mmio);
 	regs->gusbcfg.usbtrdtim = 9;
 #else
-	regs->gusbcfg.usbtrdtim = 5;
+    GUSBCFG::Get().ReadFrom(dwc->mmio()).set_usbtrdtim(5).WriteTo(dwc->mmio());
 #endif
 
     usb_dci_interface_set_speed(&dwc->dci_intf, USB_SPEED_HIGH);
