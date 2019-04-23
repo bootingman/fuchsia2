@@ -120,16 +120,16 @@ typedef struct {
 } dwc_usb_t;
 
 // dwc-endpoints.c
-bool dwc_ep_write_packet(dwc_usb_t* dwc, int ep_num);
-void dwc_ep_start_transfer(dwc_usb_t* dwc, unsigned ep_num, bool is_in, size_t length);
-void dwc_complete_ep(dwc_usb_t* dwc, uint32_t ep_num);
+bool dwc_ep_write_packet(dwc_usb_t* dwc, uint8_t ep_num);
+void dwc_ep_start_transfer(dwc_usb_t* dwc, uint8_t ep_num, bool is_in, size_t length);
+void dwc_complete_ep(dwc_usb_t* dwc, uint8_t ep_num);
 void dwc_reset_configuration(dwc_usb_t* dwc);
 void dwc_start_eps(dwc_usb_t* dwc);
-void dwc_ep_queue(dwc_usb_t* dwc, unsigned ep_num, usb_request_t* req);
+void dwc_ep_queue(dwc_usb_t* dwc, uint8_t ep_num, usb_request_t* req);
 zx_status_t dwc_ep_config(dwc_usb_t* dwc, const usb_endpoint_descriptor_t* ep_desc,
                           const usb_ss_ep_comp_descriptor_t* ss_comp_desc);
 zx_status_t dwc_ep_disable(dwc_usb_t* dwc, uint8_t ep_addr);
-zx_status_t dwc_ep_set_stall(dwc_usb_t* dwc, unsigned ep_num, bool stall);
+zx_status_t dwc_ep_set_stall(dwc_usb_t* dwc, uint8_t ep_num, bool stall);
 
 // dwc-interrupts.c
 zx_status_t dwc_irq_start(dwc_usb_t* dwc);

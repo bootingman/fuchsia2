@@ -16,9 +16,9 @@ static zx_status_t usb_dwc_softreset_core(dwc_usb_t* dwc) {
         usleep(1000);
     }
 
-    dwc_grstctl_t grstctl = {0};
-    grstctl.csftrst = 1;
-    regs->grstctl = grstctl;
+//    dwc_grstctl_t grstctl = {0};
+//    grstctl.csftrst = 1;
+    regs->grstctl.csftrst = 1;
 
     for (int i = 0; i < 1000; i++) {
         if (regs->grstctl.csftrst == 0) {
@@ -70,7 +70,7 @@ static zx_status_t usb_dwc_setupcontroller(dwc_usb_t* dwc) {
         regs->depout[i].doeptsiz.val = 0;
     }
 
-    dwc_interrupts_t gintmsk = {0};
+    dwc_interrupts_t gintmsk;
 
     gintmsk.rxstsqlvl = 1;
     gintmsk.usbreset = 1;
@@ -101,7 +101,7 @@ printf("ghwcfg1 %08x ghwcfg2 %08x ghwcfg3 %08x\n", regs->ghwcfg1, regs->ghwcfg2,
 
 zxlogf(LINFO, "enabling interrupts %08x\n", gintmsk.val);
 
-    regs->gintmsk = gintmsk;
+    regs->gintmsk.val = gintmsk.val;
 
     regs->gahbcfg.glblintrmsk = 1;
 
@@ -109,10 +109,10 @@ zxlogf(LINFO, "enabling interrupts %08x\n", gintmsk.val);
 }
 
 static void dwc_request_queue(void* ctx, usb_request_t* req, const usb_request_complete_t* cb) {
-    dwc_usb_t* dwc = ctx;
+    auto* dwc = static_cast<dwc_usb_t*>(ctx);
 
     zxlogf(INFO, "XXXXXXX dwc_request_queue ep: 0x%02x length %zu\n", req->header.ep_address, req->header.length);
-    unsigned ep_num = DWC_ADDR_TO_INDEX(req->header.ep_address);
+    uint8_t ep_num = DWC_ADDR_TO_INDEX(req->header.ep_address);
     if (ep_num == 0 || ep_num >= countof(dwc->eps)) {
         zxlogf(ERROR, "dwc_request_queue: bad ep address 0x%02X\n", req->header.ep_address);
         usb_request_complete(req, ZX_ERR_INVALID_ARGS, 0, cb);
@@ -123,29 +123,29 @@ static void dwc_request_queue(void* ctx, usb_request_t* req, const usb_request_c
 }
 
 static zx_status_t dwc_set_interface(void* ctx, const usb_dci_interface_protocol_t* dci_intf) {
-    dwc_usb_t* dwc = ctx;
+    auto* dwc = static_cast<dwc_usb_t*>(ctx);
     memcpy(&dwc->dci_intf, dci_intf, sizeof(dwc->dci_intf));
     return ZX_OK;
 }
 
 static zx_status_t dwc_config_ep(void* ctx, const usb_endpoint_descriptor_t* ep_desc,
                                  const usb_ss_ep_comp_descriptor_t* ss_comp_desc) {
-    dwc_usb_t* dwc = ctx;
+    auto* dwc = static_cast<dwc_usb_t*>(ctx);
     return dwc_ep_config(dwc, ep_desc, ss_comp_desc);
 }
 
 static zx_status_t dwc_disable_ep(void* ctx, uint8_t ep_addr) {
-    dwc_usb_t* dwc = ctx;
+    auto* dwc = static_cast<dwc_usb_t*>(ctx);
     return dwc_ep_disable(dwc, ep_addr);
 }
 
 static zx_status_t dwc_set_stall(void* ctx, uint8_t ep_address) {
-    dwc_usb_t* dwc = ctx;
+    auto* dwc = static_cast<dwc_usb_t*>(ctx);
     return dwc_ep_set_stall(dwc, DWC_ADDR_TO_INDEX(ep_address), true);
 }
 
 static zx_status_t dwc_clear_stall(void* ctx, uint8_t ep_address) {
-    dwc_usb_t* dwc = ctx;
+    auto* dwc = static_cast<dwc_usb_t*>(ctx);
     return dwc_ep_set_stall(dwc, DWC_ADDR_TO_INDEX(ep_address), false);
 }
 
@@ -170,7 +170,7 @@ static usb_dci_protocol_ops_t dwc_dci_protocol = {
 
 #if 0
 static zx_status_t dwc_set_mode(void* ctx, usb_mode_t mode) {
-    dwc_usb_t* dwc = ctx;
+    auto* dwc = static_cast<dwc_usb_t*>(ctx);
     zx_status_t status = ZX_OK;
 
     if (mode != USB_MODE_PERIPHERAL && mode != USB_MODE_NONE) {
@@ -245,19 +245,21 @@ static void dwc_release(void* ctx) {
     zxlogf(ERROR, "dwc_usb: dwc_release not implemented\n");
 }
 
-static zx_protocol_device_t dwc_device_proto = {
-    .version = DEVICE_OPS_VERSION,
-//    .get_protocol = dwc_get_protocol,
-    .unbind = dwc_unbind,
-    .release = dwc_release,
-};
+static zx_protocol_device_t dwc_device_proto = [](){
+    zx_protocol_device_t ops;
+    ops.version = DEVICE_OPS_VERSION;
+//    ops.get_protocol = dwc_get_protocol;
+    ops.unbind = dwc_unbind;
+    ops.release = dwc_release;
+    return ops;
+}();
 
 // Bind is the entry point for this driver.
 static zx_status_t dwc_bind(void* ctx, zx_device_t* dev) {
     zxlogf(TRACE, "dwc_bind: dev = %p\n", dev);
 
     // Allocate a new device object for the bus.
-    dwc_usb_t* dwc = calloc(1, sizeof(*dwc));
+    auto* dwc = static_cast<dwc_usb_t*>(calloc(1, sizeof(dwc_usb_t)));
     if (!dwc) {
         zxlogf(ERROR, "dwc_bind: bind failed to allocate usb_dwc struct\n");
         return ZX_ERR_NO_MEMORY;
@@ -283,7 +285,7 @@ static zx_status_t dwc_bind(void* ctx, zx_device_t* dev) {
     // hack for astro USB tuning (also optional)
 //    device_get_protocol(dev, ZX_PROTOCOL_ASTRO_USB, &dwc->astro_usb);
 
-    for (unsigned i = 0; i < countof(dwc->eps); i++) {
+    for (uint8_t i = 0; i < countof(dwc->eps); i++) {
         dwc_endpoint_t* ep = &dwc->eps[i];
         ep->ep_num = i;
         mtx_init(&ep->lock, mtx_plain);
@@ -291,12 +293,20 @@ static zx_status_t dwc_bind(void* ctx, zx_device_t* dev) {
     }
     dwc->eps[0].req_buffer = dwc->ep0_buffer;
 
+   device_add_args_t args = {};
+    args.version = DEVICE_ADD_ARGS_VERSION;
+    args.name = "dwc2";
+    args.ctx = dwc;
+    args.ops = &dwc_device_proto;
+    args.proto_id = ZX_PROTOCOL_USB_DCI;
+    args.proto_ops = &dwc_dci_protocol;
+
     status = pdev_map_mmio_buffer(&dwc->pdev, MMIO_INDEX, ZX_CACHE_POLICY_UNCACHED_DEVICE, &dwc->mmio);
     if (status != ZX_OK) {
         zxlogf(ERROR, "usb_dwc: pdev_map_mmio_buffer failed\n");
         goto error_return;
     }
-    dwc->regs = dwc->mmio.vaddr;
+    dwc->regs = static_cast<dwc_regs_t*>(dwc->mmio.vaddr);
 
     status = pdev_get_bti(&dwc->pdev, 0, &dwc->bti_handle);
     if (status != ZX_OK) {
@@ -326,15 +336,6 @@ static zx_status_t dwc_bind(void* ctx, zx_device_t* dev) {
         goto error_return;
     }
 
-   device_add_args_t args = {
-        .version = DEVICE_ADD_ARGS_VERSION,
-        .name = "dwc2",
-        .ctx = dwc,
-        .ops = &dwc_device_proto,
-        .proto_id = ZX_PROTOCOL_USB_DCI,
-        .proto_ops = &dwc_dci_protocol,
-    };
-
     if ((status = device_add(dev, &args, &dwc->zxdev)) != ZX_OK) {
         free(dwc);
         return status;
@@ -357,10 +358,12 @@ error_return:
     return status;
 }
 
-static zx_driver_ops_t dwc2_driver_ops = {
-    .version = DRIVER_OPS_VERSION,
-    .bind = dwc_bind,
-};
+static zx_driver_ops_t dwc2_driver_ops = [](){
+    zx_driver_ops_t ops = {};
+    ops.version = DRIVER_OPS_VERSION;
+    ops.bind = dwc_bind;
+    return ops;
+}();
 
 // The formatter does not play nice with these macros.
 // clang-format off

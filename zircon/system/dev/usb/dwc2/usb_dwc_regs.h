@@ -20,7 +20,7 @@
 // converts a USB endpoint address to 0 - 31 index
 // in endpoints -> 0 - 15
 // out endpoints -> 17 - 31 (16 is unused)
-#define DWC_ADDR_TO_INDEX(addr) (((addr) & 0xF) + (16 * !((addr) & USB_DIR_IN)))
+#define DWC_ADDR_TO_INDEX(addr) (uint8_t)(((addr) & 0xF) + (16 * !((addr) & USB_DIR_IN)))
 
 #define DWC_REG_DATA_FIFO_START 0x1000
 #define DWC_REG_DATA_FIFO(regs, ep)	((volatile uint32_t*)((uint8_t*)regs + (ep + 1) * 0x1000))
@@ -75,7 +75,7 @@ typedef union {
     };
 } dwc_gusbcfg_t;
     
-typedef union {
+union dwc_grstctl_t {
     uint32_t val;
     struct {
 	    /* Core Soft Reset */
@@ -98,9 +98,11 @@ typedef union {
 		/* AHB Master Idle */
 		uint32_t ahbidle    : 1;
     };
-} dwc_grstctl_t;
+    dwc_grstctl_t(volatile dwc_grstctl_t& r) { val = r.val; }
+    dwc_grstctl_t() { val = 0; }
+};
 
-typedef union {
+union dwc_interrupts_t {
         uint32_t val;
     struct {
         uint32_t curmode           : 1;
@@ -136,9 +138,11 @@ typedef union {
         uint32_t sessreqintr       : 1;
         uint32_t wkupintr          : 1;
     };
-} dwc_interrupts_t;
+    dwc_interrupts_t(volatile dwc_interrupts_t& r) { val = r.val; }
+    dwc_interrupts_t() { val = 0; }
+};
 
-typedef union {
+union dwc_grxstsp_t {
     uint32_t val;
     struct {
     	uint32_t epnum      : 4;
@@ -153,9 +157,10 @@ typedef union {
     	uint32_t fn         : 4;
     	uint32_t reserved   : 7;
     };
-} dwc_grxstsp_t;
+    dwc_grxstsp_t(volatile dwc_grxstsp_t& r) { val = r.val; }
+};
 
-typedef union {
+union dwc_depctl_t {
 	uint32_t val;
 	struct {
 		uint32_t mps        : 11;
@@ -178,9 +183,10 @@ typedef union {
 		uint32_t epdis      : 1;
 		uint32_t epena      : 1;
 	};
-} dwc_depctl_t;
+    dwc_depctl_t(volatile dwc_depctl_t& r) { val = r.val; }
+};
 
-typedef union {
+union dwc_deptsiz_t {
 	uint32_t val;
 	struct {
 		/* Transfer size */
@@ -191,7 +197,8 @@ typedef union {
 		uint32_t mc         : 2;
 		uint32_t reserved   : 1;
 	};
-} dwc_deptsiz_t;
+    dwc_deptsiz_t(volatile dwc_deptsiz_t& r) { val = r.val; }
+};
 
 typedef union {
 	uint32_t val;
@@ -208,7 +215,7 @@ typedef union {
 	};
 } dwc_deptsiz0_t;
 
-typedef union {
+union dwc_diepint_t {
 	uint32_t val;
 	struct {
 		/* Transfer complete mask */
@@ -234,9 +241,11 @@ typedef union {
 		uint32_t nak:1;
 		uint32_t reserved3      : 18;
 	};
-} dwc_diepint_t;
+    dwc_diepint_t(volatile dwc_diepint_t& r) { val = r.val; }
+    dwc_diepint_t() { val = 0; }
+};
 
-typedef union {
+union dwc_doepint_t {
 	uint32_t val;
 	struct {
 		/* Transfer complete */
@@ -271,7 +280,9 @@ typedef union {
         uint32_t sr             : 1;
 		uint32_t reserved3      : 16;
 	};
-} dwc_doepint_t;
+    dwc_doepint_t(volatile dwc_doepint_t& r) { val = r.val; }
+    dwc_doepint_t() { val = 0; }
+};
 
 typedef union {
     uint32_t val;
@@ -414,7 +425,7 @@ typedef union {
 	};
 } dwc_pcgcctl_t;
 
-typedef union {
+union dwc_gnptxsts_t {
     uint32_t val;
     struct {
 		uint32_t nptxfspcavail:16;
@@ -434,7 +445,8 @@ typedef union {
 		uint32_t nptxqtop_chnep:4;
 		uint32_t reserved:1;
 	};
-} dwc_gnptxsts_t;
+    dwc_gnptxsts_t(volatile dwc_gnptxsts_t& r) { val = r.val; }
+};
 
 typedef union  {
     uint32_t val;

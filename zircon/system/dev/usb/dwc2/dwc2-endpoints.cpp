@@ -6,7 +6,7 @@
 
 #include "dwc2.h"
 
-bool dwc_ep_write_packet(dwc_usb_t* dwc, int ep_num) {
+bool dwc_ep_write_packet(dwc_usb_t* dwc, uint8_t ep_num) {
     dwc_regs_t* regs = dwc->regs;
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
 
@@ -17,7 +17,7 @@ bool dwc_ep_write_packet(dwc_usb_t* dwc, int ep_num) {
 	uint32_t dwords = (len + 3) >> 2;
     uint8_t *req_buffer = &ep->req_buffer[ep->req_offset];
 
-	dwc_gnptxsts_t txstatus = regs->gnptxsts;
+    dwc_gnptxsts_t txstatus = regs->gnptxsts;
 	while  (ep->req_offset < ep->req_length && txstatus.nptxqspcavail > 0 && txstatus.nptxfspcavail > dwords) {
 zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_num, txstatus.nptxqspcavail, txstatus.nptxfspcavail, dwords);
 
@@ -37,7 +37,7 @@ zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_
 			len = ep->max_packet_size;
 
 	    dwords = (len + 3) >> 2;
-		txstatus = regs->gnptxsts;
+		txstatus.val = regs->gnptxsts.val;
 	}
 
     if (ep->req_offset < ep->req_length) {
@@ -50,7 +50,7 @@ zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_
     }
 }
 
-void dwc_ep_start_transfer(dwc_usb_t* dwc, unsigned ep_num, bool is_in, size_t length) {
+void dwc_ep_start_transfer(dwc_usb_t* dwc, uint8_t ep_num, bool is_in, size_t length) {
 if (ep_num > 0) zxlogf(LINFO, "dwc_ep_start_transfer epnum %u is_in %d length %zu\n", ep_num, is_in, length);
     dwc_regs_t* regs = dwc->regs;
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
@@ -60,14 +60,14 @@ if (ep_num > 0) zxlogf(LINFO, "dwc_ep_start_transfer epnum %u is_in %d length %z
 	uint32_t ep_mps = ep->max_packet_size;
 
     ep->req_offset = 0;
-    ep->req_length = length;
+    ep->req_length = static_cast<uint32_t>(length);
 
 	if (is_in) {
 		depctl_reg = &regs->depin[ep_num].diepctl;
 		deptsiz_reg = &regs->depin[ep_num].dieptsiz;
 	} else {
 	    if (ep_num > 0) {
-	        ep_num -= 16;
+	        ep_num = static_cast<uint8_t>(ep_num - 16);
 	    }
 		depctl_reg = &regs->depout[ep_num].doepctl;
 		deptsiz_reg = &regs->depout[ep_num].doeptsiz;
@@ -77,35 +77,35 @@ if (ep_num > 0) zxlogf(LINFO, "dwc_ep_start_transfer epnum %u is_in %d length %z
 	dwc_deptsiz_t deptsiz = *deptsiz_reg;
 
 	/* Zero Length Packet? */
-	if (length == 0) {
-		deptsiz.xfersize = is_in ? 0 : ep_mps;
-		deptsiz.pktcnt = 1;
-	} else {
-		deptsiz.pktcnt = (length + (ep_mps - 1)) / ep_mps;
-		if (is_in && length < ep_mps) {
-			deptsiz.xfersize = length;
-		}
-		else {
-			deptsiz.xfersize = length - ep->req_offset;
-		}
-	}
+    if (length == 0) {
+        deptsiz.xfersize = is_in ? 0 : (ep_mps & 0x7ffff);
+        deptsiz.pktcnt = 1;
+    } else {
+        deptsiz.pktcnt = ((length + (ep_mps - 1)) / ep_mps) & 0x3ff;
+        if (is_in && length < ep_mps) {
+            deptsiz.xfersize = length & 0x7ffff;
+        }
+        else {
+            deptsiz.xfersize = (length - ep->req_offset) & 0x7ffff;
+        }
+    }
 zxlogf(LINFO, "epnum %d is_in %d xfer_count %d xfer_len %d pktcnt %d xfersize %d\n",
         ep_num, is_in, ep->req_offset, ep->req_length, deptsiz.pktcnt, deptsiz.xfersize);
 
-    *deptsiz_reg = deptsiz;
+    deptsiz_reg->val = deptsiz.val;
 
 	/* EP enable */
 	depctl.cnak = 1;
 	depctl.epena = 1;
 
-    *depctl_reg = depctl;
+    depctl_reg->val = depctl.val;
 
     if (is_in) {
         dwc_ep_write_packet(dwc, ep_num);
     }
 }
 
-void dwc_complete_ep(dwc_usb_t* dwc, uint32_t ep_num) {
+void dwc_complete_ep(dwc_usb_t* dwc, uint8_t ep_num) {
     zxlogf(LINFO, "XXXXX dwc_complete_ep ep_num %u\n", ep_num);
 
     if (ep_num != 0) {
@@ -251,7 +251,7 @@ void dwc_reset_configuration(dwc_usb_t* dwc) {
     // Do something here
 #endif
 
-    for (unsigned ep_num = 1; ep_num < countof(dwc->eps); ep_num++) {
+    for (uint8_t ep_num = 1; ep_num < countof(dwc->eps); ep_num++) {
         dwc_ep_end_transfers(dwc, ep_num, ZX_ERR_IO_NOT_PRESENT);
         dwc_ep_set_stall(dwc, ep_num, false);
     }
@@ -272,7 +272,7 @@ void dwc_start_eps(dwc_usb_t* dwc) {
     }
 }
 
-void dwc_ep_queue(dwc_usb_t* dwc, unsigned ep_num, usb_request_t* req) {
+void dwc_ep_queue(dwc_usb_t* dwc, uint8_t ep_num, usb_request_t* req) {
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
 
     // OUT transactions must have length > 0 and multiple of max packet size
@@ -319,7 +319,7 @@ zxlogf(LINFO, "dwc_ep_config address %02x ep_num %d\n", ep_desc->bEndpointAddres
         return ZX_ERR_INVALID_ARGS;
     }
 
-    unsigned ep_type = usb_ep_type(ep_desc);
+    uint8_t ep_type = usb_ep_type(ep_desc);
     if (ep_type == USB_ENDPOINT_ISOCHRONOUS) {
         zxlogf(ERROR, "dwc_ep_config: isochronous endpoints are not supported\n");
         return ZX_ERR_NOT_SUPPORTED;
@@ -391,7 +391,7 @@ zx_status_t dwc_ep_disable(dwc_usb_t* dwc, uint8_t ep_addr) {
     return ZX_OK;
 }
 
-zx_status_t dwc_ep_set_stall(dwc_usb_t* dwc, unsigned ep_num, bool stall) {
+zx_status_t dwc_ep_set_stall(dwc_usb_t* dwc, uint8_t ep_num, bool stall) {
     if (ep_num >= countof(dwc->eps)) {
         return ZX_ERR_INVALID_ARGS;
     }
