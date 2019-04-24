@@ -293,13 +293,14 @@ void dwc_flush_fifo(dwc_usb_t* dwc, const int num) {
 
 static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
     dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
 	zxlogf(LINFO, "\nUSB RESET\n");
 
     dwc->ep0_state = EP0_STATE_DISCONNECTED;
 
 	/* Clear the Remote Wakeup Signalling */
-	regs->dctl.rmtwkupsig = 1;
+	DCTL::Get().ReadFrom(mmio).set_rmtwkupsig(1).WriteTo(mmio);
 
 	for (int i = 0; i < MAX_EPS_CHANNELS; i++) {
 	     dwc_depctl_t diepctl = regs->depin[i].diepctl;
@@ -349,6 +350,7 @@ static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
 
 static void dwc_handle_enumdone_irq(dwc_usb_t* dwc) {
     dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
 	zxlogf(INFO, "dwc_handle_enumdone_irq\n");
 
@@ -387,7 +389,7 @@ static void dwc_handle_enumdone_irq(dwc_usb_t* dwc) {
 	}
 #endif
 
-    regs->dctl.cgnpinnak = 1;
+	DCTL::Get().ReadFrom(mmio).set_cgnpinnak(1).WriteTo(mmio);
 
 	/* high speed */
 #if 0 // astro

@@ -33,19 +33,21 @@ static zx_status_t usb_dwc_softreset_core(dwc_usb_t* dwc) {
 
 static zx_status_t usb_dwc_setupcontroller(dwc_usb_t* dwc) {
     dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
-    GUSBCFG::Get().ReadFrom(dwc->mmio()).set_force_dev_mode(1).WriteTo(dwc->mmio());
-    GAHBCFG::Get().ReadFrom(dwc->mmio()).set_dmaenable(0).WriteTo(dwc->mmio());
+    GUSBCFG::Get().ReadFrom(mmio).set_force_dev_mode(1).WriteTo(mmio);
+    GAHBCFG::Get().ReadFrom(mmio).set_dmaenable(0).WriteTo(mmio);
 printf("did regs->gahbcfg.dmaenable\n");
 
 #if 0 // astro
-    GUSBCFG::Get().ReadFrom(dwc->mmio()).set_usbtrdtim(9).WriteTo(dwc->mmio());
+    GUSBCFG::Get().ReadFrom(mmio).set_usbtrdtim(9).WriteTo(mmio);
 #else
-    GUSBCFG::Get().ReadFrom(dwc->mmio()).set_usbtrdtim(5).WriteTo(dwc->mmio());
+    GUSBCFG::Get().ReadFrom(mmio).set_usbtrdtim(5).WriteTo(mmio);
 #endif
 
-    regs->dctl.sftdiscon = 1;
-    regs->dctl.sftdiscon = 0;
+    // ???
+	DCTL::Get().ReadFrom(mmio).set_sftdiscon(1).WriteTo(mmio);
+	DCTL::Get().ReadFrom(mmio).set_sftdiscon(0).WriteTo(mmio);
 
     // reset phy clock
     regs->pcgcctl.val = 0;
@@ -57,7 +59,7 @@ printf("did regs->gahbcfg.dmaenable\n");
 
 	dwc_flush_fifo(dwc, 0x10);
 
-    GRSTCTL::Get().ReadFrom(dwc->mmio()).set_intknqflsh(1).WriteTo(dwc->mmio());
+    GRSTCTL::Get().ReadFrom(mmio).set_intknqflsh(1).WriteTo(mmio);
 
 	/* Clear all pending Device Interrupts */
 	regs->diepmsk.val = 0;
@@ -99,13 +101,13 @@ printf("did regs->gahbcfg.dmaenable\n");
 printf("ghwcfg1 %08x ghwcfg2 %08x ghwcfg3 %08x\n", regs->ghwcfg1, regs->ghwcfg2, regs->ghwcfg3);
 
 	regs->gotgint = 0xFFFFFFF;
-    GINTSTS::Get().FromValue(0xFFFFFFF).WriteTo(dwc->mmio());
+    GINTSTS::Get().FromValue(0xFFFFFFF).WriteTo(mmio);
 
 zxlogf(LINFO, "enabling interrupts %08x\n", gintmsk.reg_value());
 
-    gintmsk.WriteTo(dwc->mmio());
+    gintmsk.WriteTo(mmio);
 
-    GAHBCFG::Get().ReadFrom(dwc->mmio()).set_glblintrmsk(1).WriteTo(dwc->mmio());
+    GAHBCFG::Get().ReadFrom(mmio).set_glblintrmsk(1).WriteTo(mmio);
 
     return ZX_OK;
 }

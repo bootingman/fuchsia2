@@ -422,46 +422,8 @@ public:
     DEF_BIT(16, nakonbble);
     DEF_BIT(17, encontonbna);
     DEF_BIT(18, besl_reject);
+    static auto Get() { return hwreg::RegisterAddr<DCTL>(0x804); }
 };
-
-typedef union {
-    uint32_t val;
-    struct {
-        /* Remote Wakeup */
-        uint32_t rmtwkupsig     : 1;
-        /* Soft Disconnect */
-        uint32_t sftdiscon      : 1;
-        /* Global Non-Periodic IN NAK Status */
-        uint32_t gnpinnaksts    : 1;
-        /* Global OUT NAK Status */
-        uint32_t goutnaksts     : 1;
-        /* Test Control */
-        uint32_t tstctl         : 3;
-        /* Set Global Non-Periodic IN NAK */
-        uint32_t sgnpinnak      : 1;
-        /* Clear Global Non-Periodic IN NAK */
-        uint32_t cgnpinnak      : 1;
-        /* Set Global OUT NAK */
-        uint32_t sgoutnak       : 1;
-        /* Clear Global OUT NAK */
-        uint32_t cgoutnak       : 1;
-        /* Power-On Programming Done */
-        uint32_t pwronprgdone   : 1;
-        /* Reserved */
-        uint32_t reserved       : 1;
-        /* Global Multi Count */
-        uint32_t gmc            : 2;
-        /* Ignore Frame Number for ISOC EPs */
-        uint32_t ifrmnum        : 1;
-        /* NAK on Babble */
-        uint32_t nakonbble      : 1;
-        /* Enable Continue on BNA */
-        uint32_t encontonbna    : 1;
-        /* Enable deep sleep besl reject feature*/
-        uint32_t besl_reject    : 1;
-        uint32_t reserved2      : 13;
-    };
-} dwc_dctl_t;
 
 class DSTS : public hwreg::RegisterBase<DSTS, uint32_t, hwreg::EnablePrinter> {
 public:
@@ -469,24 +431,8 @@ public:
     DEF_FIELD(2, 1, enumspd);
     DEF_BIT(3, errticerr);
     DEF_FIELD(21, 8, soffn);
+    static auto Get() { return hwreg::RegisterAddr<DCTL>(0x808); }
 };
-
-typedef union {
-    uint32_t val;
-    struct {
-        /* Suspend Status */
-        uint32_t suspsts    : 1;
-        /* Enumerated Speed */
-        uint32_t enumspd    : 2;
-        /* Erratic Error */
-        uint32_t errticerr  : 1;
-        uint32_t reserved   : 4;
-        /* Frame or Microframe Number of the received SOF */
-        uint32_t soffn      : 14;
-        uint32_t reserved2  : 10;
-    };
-} dwc_dsts_t;
-
 
 typedef struct {
 	/* Device IN Endpoint Control Register */
@@ -646,9 +592,9 @@ typedef volatile struct {
     // Device Configuration Register
     dwc_dcfg_t dcfg;
     // Device Control Register
-    dwc_dctl_t dctl;
+    uint32_t dctl;
     // Device Status Register
-    dwc_dsts_t dsts;
+    uint32_t dsts;
     uint32_t unused;
     // Device IN Endpoint Common Interrupt Mask Register
     dwc_diepint_t diepmsk;
