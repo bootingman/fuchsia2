@@ -66,11 +66,9 @@ printf("did regs->gahbcfg.dmaenable\n");
 	regs->daint = 0xffffffff;
 	regs->daintmsk = 0;
 
-    for (int i = 0; i < MAX_EPS_CHANNELS; i++) {
-        regs->depin[i].diepctl.val = 0;
-        regs->depout[i].doepctl.val = 0;
-        regs->depin[i].dieptsiz.val = 0;
-        regs->depout[i].doeptsiz.val = 0;
+    for (int i = 0; i < DWC_MAX_EPS; i++) {
+        DEPCTL::Get(i).FromValue(0).WriteTo(mmio);
+        DEPTSIZ::Get(i).FromValue(0).WriteTo(mmio);
     }
 
     auto gintmsk = GINTMSK::Get().FromValue(0);

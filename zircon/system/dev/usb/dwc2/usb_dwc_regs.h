@@ -191,6 +191,10 @@ public:
 
 class DEPCTL : public hwreg::RegisterBase<DEPCTL, uint32_t, hwreg::EnablePrinter> {
 public:
+#define DWC_DEP0CTL_MPS_64	 0
+#define DWC_DEP0CTL_MPS_32	 1
+#define DWC_DEP0CTL_MPS_16	 2
+#define DWC_DEP0CTL_MPS_8	 3
     DEF_FIELD(10, 0, mps);
     DEF_FIELD(14, 11, nextep);
     DEF_BIT(15, usbactep);
@@ -206,6 +210,7 @@ public:
     DEF_BIT(29, setd1pid);
     DEF_BIT(30, epdis);
     DEF_BIT(31, epena);
+    static auto Get(unsigned i) { return hwreg::RegisterAddr<DEPCTL>(0x900 + 0x20 * i); }
 };
 
 union dwc_depctl_t {
@@ -234,13 +239,6 @@ union dwc_depctl_t {
     dwc_depctl_t(volatile dwc_depctl_t& r) { val = r.val; }
 };
 
-class DEPTSIZ : public hwreg::RegisterBase<DEPTSIZ, uint32_t, hwreg::EnablePrinter> {
-public:
-    DEF_FIELD(18, 0, xfersize);
-    DEF_FIELD(28, 19, pktcnt);
-    DEF_FIELD(30, 29, mc);
-};
-
 union dwc_deptsiz_t {
 	uint32_t val;
 	struct {
@@ -253,13 +251,6 @@ union dwc_deptsiz_t {
 		uint32_t reserved   : 1;
 	};
     dwc_deptsiz_t(volatile dwc_deptsiz_t& r) { val = r.val; }
-};
-
-class DEPTSIZ0 : public hwreg::RegisterBase<DEPTSIZ0, uint32_t, hwreg::EnablePrinter> {
-public:
-    DEF_FIELD(6, 0, xfersize);
-    DEF_FIELD(20, 19, pktcnt);
-    DEF_FIELD(30, 29, supcnt);
 };
 
 union dwc_deptsiz0_t {
@@ -275,6 +266,22 @@ union dwc_deptsiz0_t {
 		uint32_t supcnt     : 2;
 		uint32_t reserved3  : 1;
 	};
+};
+
+class DEPTSIZ : public hwreg::RegisterBase<DEPTSIZ, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(18, 0, xfersize);
+    DEF_FIELD(28, 19, pktcnt);
+    DEF_FIELD(30, 29, mc);
+    static auto Get(unsigned i) { return hwreg::RegisterAddr<DEPTSIZ>(0x910 + 0x20 * i); }
+};
+
+class DEPTSIZ0 : public hwreg::RegisterBase<DEPTSIZ0, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(6, 0, xfersize);
+    DEF_FIELD(20, 19, pktcnt);
+    DEF_FIELD(30, 29, supcnt);
+    static auto Get() { return hwreg::RegisterAddr<DEPTSIZ0>(0xB10); }
 };
 
 class DIEPINT : public hwreg::RegisterBase<DIEPINT, uint32_t, hwreg::EnablePrinter> {
@@ -425,11 +432,11 @@ public:
 typedef struct {
 	/* Device IN Endpoint Control Register */
 	dwc_depctl_t diepctl;
-
 	uint32_t reserved;
 	/* Device IN Endpoint Interrupt Register */
 	dwc_diepint_t diepint;
 	uint32_t reserved2;
+
 	/* Device IN Endpoint Transfer Size */
 	dwc_deptsiz_t dieptsiz;
 	/* Device IN Endpoint DMA Address Register */
@@ -443,11 +450,11 @@ typedef struct {
 typedef struct {
 	/* Device OUT Endpoint Control Register */
 	dwc_depctl_t doepctl;
-
 	uint32_t reserved;
 	/* Device OUT Endpoint Interrupt Register */
 	dwc_doepint_t doepint;
 	uint32_t reserved2;
+
 	/* Device OUT Endpoint Transfer Size Register */
 	dwc_deptsiz_t doeptsiz;
 	/* Device OUT Endpoint DMA Address Register */

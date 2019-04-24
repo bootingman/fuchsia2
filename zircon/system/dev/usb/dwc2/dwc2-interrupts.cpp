@@ -41,20 +41,18 @@ zxlogf(LINFO, "dwc_set_address %u\n", address);
 static void dwc2_ep0_out_start(dwc_usb_t* dwc)  {
 //    zxlogf(LINFO, "dwc2_ep0_out_start\n");
 
-    dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
-	dwc_deptsiz0_t doeptsize0;
-//	dwc_depctl_t doepctl = {};
+    auto doeptsize0 = DEPTSIZ0::Get().FromValue(0);
 
-	doeptsize0.supcnt = 3;
-	doeptsize0.pktcnt = 1;
-	doeptsize0.xfersize = 8 * 3;
-    regs->depout[0].doeptsiz.val = doeptsize0.val;
+	doeptsize0.set_supcnt(3);
+	doeptsize0.set_pktcnt(1);
+	doeptsize0.set_xfersize(8 * 3);
+	doeptsize0.WriteTo(mmio);
 
 //??    dwc->ep0_state = EP0_STATE_IDLE;
 
-//	doepctl.epena = 1;
-    regs->depout[0].doepctl.epena = 1;
+    DEPCTL::Get(16).ReadFrom(mmio).set_epena(1).WriteTo(mmio);
 }
 
 static void do_setup_status_phase(dwc_usb_t* dwc, bool is_in) {
@@ -215,7 +213,7 @@ static void pcd_setup(dwc_usb_t* dwc) {
         if (dwc->ep0_state == EP0_STATE_DATA_IN && setup->wLength > 0) {
 //            zxlogf(LINFO, "queue a write for the data phase\n");
             dwc->ep0_state = EP0_STATE_DATA_IN;
-            dwc_ep_start_transfer(dwc, 0, true, actual);
+            dwc_ep_start_transfer(dwc, 0, true, static_cast<uint32_t>(actual));
         } else {
 			dwc_ep0_complete_request(dwc);
         }
@@ -304,16 +302,16 @@ static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
 	DCTL::Get().ReadFrom(mmio).set_rmtwkupsig(1).WriteTo(mmio);
 
 	for (int i = 0; i < MAX_EPS_CHANNELS; i++) {
-	     dwc_depctl_t diepctl = regs->depin[i].diepctl;
+	    auto diepctl = DEPCTL::Get(i).ReadFrom(mmio);
 
-        if (diepctl.epena) {
+        if (diepctl.epena()) {
             // disable all active IN EPs
-            diepctl.snak = 1;
-            diepctl.epdis = 1;
-    	    regs->depin[i].diepctl.val = diepctl.val;
+            diepctl.set_snak(1);
+            diepctl.set_epdis(1);
+            diepctl.WriteTo(mmio);
         }
 
-        regs->depout[i].doepctl.snak = 1;
+        DEPCTL::Get(i + 16).ReadFrom(mmio).set_snak(1).WriteTo(mmio);
 	}
 
 	/* Flush the NP Tx FIFO */
@@ -350,11 +348,9 @@ static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
 }
 
 static void dwc_handle_enumdone_irq(dwc_usb_t* dwc) {
-    dwc_regs_t* regs = dwc->regs;
     auto* mmio = dwc->mmio();
 
 	zxlogf(INFO, "dwc_handle_enumdone_irq\n");
-
 
 /*
     if (dwc->astro_usb.ops) {
@@ -365,8 +361,8 @@ static void dwc_handle_enumdone_irq(dwc_usb_t* dwc) {
 
     dwc->eps[0].max_packet_size = 64;
 
-    regs->depin[0].diepctl.mps = DWC_DEP0CTL_MPS_64;
-    regs->depout[0].doepctl.epena = 1;
+    DEPCTL::Get(0).ReadFrom(mmio).set_mps(DWC_DEP0CTL_MPS_64).WriteTo(mmio);
+    DEPCTL::Get(16).ReadFrom(mmio).set_epena(1).WriteTo(mmio);
 
 #if 0 // astro future use
 	depctl.d32 = dwc_read_reg32(DWC_REG_IN_EP_REG(1));
