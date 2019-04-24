@@ -61,7 +61,7 @@ static void do_setup_status_phase(dwc_usb_t* dwc, bool is_in) {
 
 	dwc->ep0_state = EP0_STATE_STATUS;
 
-	dwc_ep_start_transfer(dwc, 0, is_in, 0);
+	dwc_ep_start_transfer(dwc, (is_in ? DWC_EP0_IN : DWC_EP0_OUT), 0);
 
 	/* Prepare for more SETUP Packets */
 	dwc2_ep0_out_start(dwc);
@@ -198,7 +198,7 @@ static void pcd_setup(dwc_usb_t* dwc) {
 //zxlogf(LINFO, "queue read\n");
         // queue a read for the data phase
         dwc->ep0_state = EP0_STATE_DATA_OUT;
-        dwc_ep_start_transfer(dwc, 0, false, setup->wLength);
+        dwc_ep_start_transfer(dwc, DWC_EP0_OUT, setup->wLength);
     } else {
         size_t actual;
         __UNUSED zx_status_t status = dwc_handle_setup(dwc, setup, dwc->ep0_buffer,
@@ -213,7 +213,7 @@ static void pcd_setup(dwc_usb_t* dwc) {
         if (dwc->ep0_state == EP0_STATE_DATA_IN && setup->wLength > 0) {
 //            zxlogf(LINFO, "queue a write for the data phase\n");
             dwc->ep0_state = EP0_STATE_DATA_IN;
-            dwc_ep_start_transfer(dwc, 0, true, static_cast<uint32_t>(actual));
+            dwc_ep_start_transfer(dwc, DWC_EP0_IN, static_cast<uint32_t>(actual));
         } else {
 			dwc_ep0_complete_request(dwc);
         }

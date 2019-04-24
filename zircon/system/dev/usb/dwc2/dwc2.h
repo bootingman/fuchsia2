@@ -127,7 +127,7 @@ typedef struct {
 
 // dwc-endpoints.c
 bool dwc_ep_write_packet(dwc_usb_t* dwc, uint8_t ep_num);
-void dwc_ep_start_transfer(dwc_usb_t* dwc, uint8_t ep_num, bool is_in, uint32_t length);
+void dwc_ep_start_transfer(dwc_usb_t* dwc, uint8_t ep_num, uint32_t length);
 void dwc_complete_ep(dwc_usb_t* dwc, uint8_t ep_num);
 void dwc_reset_configuration(dwc_usb_t* dwc);
 void dwc_start_eps(dwc_usb_t* dwc);

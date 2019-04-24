@@ -52,10 +52,11 @@ zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_
     }
 }
 
-void dwc_ep_start_transfer(dwc_usb_t* dwc, uint8_t ep_num, bool is_in, uint32_t length) {
-if (ep_num > 0) zxlogf(LINFO, "dwc_ep_start_transfer epnum %u is_in %d length %u\n", ep_num, is_in, length);
-    dwc_regs_t* regs = dwc->regs;
+void dwc_ep_start_transfer(dwc_usb_t* dwc, uint8_t ep_num, uint32_t length) {
+if (ep_num > 0) zxlogf(LINFO, "dwc_ep_start_transfer epnum %u length %u\n", ep_num, length);
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
+    dwc_regs_t* regs = dwc->regs;
+    bool is_in = DWC_EP_IS_IN(ep_num);
 
 	volatile dwc_depctl_t* depctl_reg;
 	volatile dwc_deptsiz_t* deptsiz_reg;
@@ -165,9 +166,9 @@ void dwc_complete_ep(dwc_usb_t* dwc, uint8_t ep_num) {
 
 static void dwc_ep_queue_next_locked(dwc_usb_t* dwc, dwc_endpoint_t* ep) {
     dwc_usb_req_internal_t* req_int = NULL;
-    bool is_in = DWC_EP_IS_IN(ep->ep_num);
 
 #if SINGLE_EP_IN_QUEUE
+    bool is_in = DWC_EP_IS_IN(ep->ep_num);
     if (is_in) {
         if (dwc->current_in_req == NULL) {
             req_int = list_remove_head_type(&dwc->queued_in_reqs, dwc_usb_req_internal_t, node);
@@ -188,7 +189,7 @@ printf("dwc_ep_queue_next_locked current_req %p req_int %p\n", ep->current_req, 
         usb_request_mmap(req, (void **)&ep->req_buffer);
         ep->send_zlp = req->header.send_zlp && (req->header.length % ep->max_packet_size) == 0;
 
-	    dwc_ep_start_transfer(dwc, ep->ep_num, is_in, static_cast<uint32_t>(req->header.length));
+	    dwc_ep_start_transfer(dwc, ep->ep_num, static_cast<uint32_t>(req->header.length));
     }
 }
 

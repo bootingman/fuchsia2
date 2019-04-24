@@ -15,6 +15,8 @@
 
 #define DWC_EP_IS_IN(ep)    ((ep) < 16)
 #define DWC_EP_IS_OUT(ep)   ((ep) >= 16)
+#define DWC_EP0_IN          0
+#define DWC_EP0_OUT         16
 
 #define DWC_MAX_EPS    32
 
