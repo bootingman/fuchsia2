@@ -457,40 +457,6 @@ typedef struct {
 	uint32_t doepdmab;
 } dwc_depout_t;
 
-typedef union {
-    uint32_t val;
-    struct {
-		/** Stop Pclk */
-		uint32_t stoppclk:1;
-		/** Gate Hclk */
-		uint32_t gatehclk:1;
-		/** Power Clamp */
-		uint32_t pwrclmp:1;
-		/** Reset Power Down Modules */
-		uint32_t rstpdwnmodule:1;
-		/** Reserved */
-		uint32_t reserved:1;
-		/** Enable Sleep Clock Gating (Enbl_L1Gating) */
-		uint32_t enbl_sleep_gating:1;
-		/** PHY In Sleep (PhySleep) */
-		uint32_t phy_in_sleep:1;
-		/** Deep Sleep*/
-		uint32_t deep_sleep:1;
-		uint32_t resetaftsusp:1;
-		uint32_t restoremode:1;
-		uint32_t reserved10_12:3;
-		uint32_t ess_reg_restored:1;
-		uint32_t prt_clk_sel:2;
-		uint32_t port_power:1;
-		uint32_t max_xcvrselect:2;
-		uint32_t max_termsel:1;
-		uint32_t mac_dev_addr:7;
-		uint32_t p2hd_dev_enum_spd:2;
-		uint32_t p2hd_prt_spd:2;
-		uint32_t if_dev_mode:1;
-	};
-} dwc_pcgcctl_t;
-
 
 typedef volatile struct {
     // OTG Control and Status Register
@@ -585,6 +551,6 @@ typedef volatile struct {
 
     uint32_t reserved_0xD00[(0xE00 - 0xD00) / sizeof(uint32_t)];
 
-    dwc_pcgcctl_t pcgcctl;
+    uint32_t pcgcctl;
 
 } dwc_regs_t;

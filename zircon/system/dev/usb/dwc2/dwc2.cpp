@@ -50,7 +50,7 @@ printf("did regs->gahbcfg.dmaenable\n");
 	DCTL::Get().ReadFrom(mmio).set_sftdiscon(0).WriteTo(mmio);
 
     // reset phy clock
-    regs->pcgcctl.val = 0;
+    regs->pcgcctl = 0;
 
     regs->grxfsiz = 256;    //???
 
