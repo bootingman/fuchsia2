@@ -53,17 +53,19 @@ zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_
 }
 
 void dwc_ep_start_transfer(dwc_usb_t* dwc, uint8_t ep_num, uint32_t length) {
-if (ep_num > 0) zxlogf(LINFO, "dwc_ep_start_transfer epnum %u length %u\n", ep_num, length);
+zxlogf(LINFO, "dwc_ep_start_transfer epnum %u length %u\n", ep_num, length);
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
-    dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
     bool is_in = DWC_EP_IS_IN(ep_num);
 
-	volatile dwc_depctl_t* depctl_reg;
-	volatile dwc_deptsiz_t* deptsiz_reg;
 	uint32_t ep_mps = ep->max_packet_size;
 
     ep->req_offset = 0;
     ep->req_length = static_cast<uint32_t>(length);
+
+/*
+	volatile dwc_depctl_t* depctl_reg;
+	volatile dwc_deptsiz_t* deptsiz_reg;
 
 	if (is_in) {
 		depctl_reg = &regs->depin[ep_num].diepctl;
@@ -78,30 +80,32 @@ if (ep_num > 0) zxlogf(LINFO, "dwc_ep_start_transfer epnum %u length %u\n", ep_n
 
     dwc_depctl_t depctl = *depctl_reg;
 	dwc_deptsiz_t deptsiz = *deptsiz_reg;
+*/
+    auto deptsiz = DEPTSIZ::Get(ep_num).ReadFrom(mmio);
 
 	/* Zero Length Packet? */
     if (length == 0) {
-        deptsiz.xfersize = is_in ? 0 : (ep_mps & 0x7ffff);
-        deptsiz.pktcnt = 1;
+        deptsiz.set_xfersize(is_in ? 0 : ep_mps);
+        deptsiz.set_pktcnt(1);
     } else {
-        deptsiz.pktcnt = ((length + (ep_mps - 1)) / ep_mps) & 0x3ff;
+        deptsiz.set_pktcnt((length + (ep_mps - 1)) / ep_mps);
         if (is_in && length < ep_mps) {
-            deptsiz.xfersize = length & 0x7ffff;
+            deptsiz.set_xfersize(length);
         }
         else {
-            deptsiz.xfersize = (length - ep->req_offset) & 0x7ffff;
+            deptsiz.set_xfersize(length - ep->req_offset);
         }
     }
 zxlogf(LINFO, "epnum %d is_in %d xfer_count %d xfer_len %d pktcnt %d xfersize %d\n",
-        ep_num, is_in, ep->req_offset, ep->req_length, deptsiz.pktcnt, deptsiz.xfersize);
+        ep_num, is_in, ep->req_offset, ep->req_length, deptsiz.pktcnt(), deptsiz.xfersize());
 
-    deptsiz_reg->val = deptsiz.val;
+    deptsiz.WriteTo(mmio);
 
 	/* EP enable */
-	depctl.cnak = 1;
-	depctl.epena = 1;
-
-    depctl_reg->val = depctl.val;
+    auto depctl = DEPCTL::Get(ep_num).ReadFrom(mmio);
+	depctl.set_cnak(1);
+	depctl.set_epena(1);
+	depctl.WriteTo(mmio);
 
     if (is_in) {
         dwc_ep_write_packet(dwc, ep_num);
