@@ -215,61 +215,6 @@ public:
     static auto Get(unsigned i) { return hwreg::RegisterAddr<DEPCTL>(0x900 + 0x20 * i); }
 };
 
-union dwc_depctl_t {
-	uint32_t val;
-	struct {
-		uint32_t mps        : 11;
-#define DWC_DEP0CTL_MPS_64	 0
-#define DWC_DEP0CTL_MPS_32	 1
-#define DWC_DEP0CTL_MPS_16	 2
-#define DWC_DEP0CTL_MPS_8	 3
-		uint32_t nextep     : 4;
-		uint32_t usbactep   : 1;
-		uint32_t dpid       : 1;
-		uint32_t naksts     : 1;
-		uint32_t eptype     : 2;
-		uint32_t snp        : 1;
-		uint32_t stall      : 1;
-		uint32_t txfnum     : 4;
-		uint32_t cnak       : 1;
-		uint32_t snak       : 1;
-		uint32_t setd0pid   : 1;
-		uint32_t setd1pid   : 1;
-		uint32_t epdis      : 1;
-		uint32_t epena      : 1;
-	};
-    dwc_depctl_t(volatile dwc_depctl_t& r) { val = r.val; }
-};
-
-union dwc_deptsiz_t {
-	uint32_t val;
-	struct {
-		/* Transfer size */
-		uint32_t xfersize   : 19;
-		/* Packet Count */
-		uint32_t pktcnt     : 10;
-		/* Multi Count */
-		uint32_t mc         : 2;
-		uint32_t reserved   : 1;
-	};
-    dwc_deptsiz_t(volatile dwc_deptsiz_t& r) { val = r.val; }
-};
-
-union dwc_deptsiz0_t {
-	uint32_t val;
-	struct {
-		/* Transfer size */
-		uint32_t xfersize   : 7;
-		uint32_t reserved   : 12;
-		/* Packet Count */
-		uint32_t pktcnt     : 2;
-		uint32_t reserved2  : 8;
-		/* Setup Packet Count */
-		uint32_t supcnt     : 2;
-		uint32_t reserved3  : 1;
-	};
-};
-
 class DEPTSIZ : public hwreg::RegisterBase<DEPTSIZ, uint32_t, hwreg::EnablePrinter> {
 public:
     DEF_FIELD(18, 0, xfersize);
@@ -433,14 +378,14 @@ public:
 
 typedef struct {
 	/* Device IN Endpoint Control Register */
-	dwc_depctl_t diepctl;
+	uint32_t diepctl;
 	uint32_t reserved;
 	/* Device IN Endpoint Interrupt Register */
 	dwc_diepint_t diepint;
 	uint32_t reserved2;
 
 	/* Device IN Endpoint Transfer Size */
-	dwc_deptsiz_t dieptsiz;
+	uint32_t dieptsiz;
 	/* Device IN Endpoint DMA Address Register */
 	uint32_t diepdma;
 	/* Device IN Endpoint Transmit FIFO Status Register */
@@ -451,14 +396,14 @@ typedef struct {
 
 typedef struct {
 	/* Device OUT Endpoint Control Register */
-	dwc_depctl_t doepctl;
+	uint32_t doepctl;
 	uint32_t reserved;
 	/* Device OUT Endpoint Interrupt Register */
 	dwc_doepint_t doepint;
 	uint32_t reserved2;
 
 	/* Device OUT Endpoint Transfer Size Register */
-	dwc_deptsiz_t doeptsiz;
+	uint32_t doeptsiz;
 	/* Device OUT Endpoint DMA Address Register */
 	uint32_t doepdma;
 	uint32_t reserved3;
