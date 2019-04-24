@@ -155,6 +155,8 @@ public:
         : Dwc2Type(parent), pdev_(pdev) {}
 
     static zx_status_t Create(void* ctx, zx_device_t* parent);
+    zx_status_t Init();
+    int IrqThread();
 
     // Device protocol implementation.
     void DdkUnbind();

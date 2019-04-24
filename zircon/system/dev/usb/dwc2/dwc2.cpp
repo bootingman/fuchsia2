@@ -365,6 +365,133 @@ error_return:
     return status;
 }
 
+zx_status_t Dwc2::Create(void* ctx, zx_device_t* parent) {
+    pdev_protocol_t pdev;
+
+    auto status = device_get_protocol(parent, ZX_PROTOCOL_PDEV, &pdev);
+    if (status != ZX_OK) {
+        return status;
+    }
+
+    fbl::AllocChecker ac;
+    auto mt_usb = fbl::make_unique_checked<Dwc2>(&ac, parent, &pdev);
+    if (!ac.check()) {
+        return ZX_ERR_NO_MEMORY;
+    }
+
+    status = mt_usb->Init();
+    if (status != ZX_OK) {
+        return status;
+    }
+
+    // devmgr is now in charge of the device.
+    __UNUSED auto* dummy = mt_usb.release();
+    return ZX_OK;
+}
+
+zx_status_t Dwc2::Init() {
+    auto status = pdev_.MapMmio(0, &mmio_);
+    if (status != ZX_OK) {
+        return status;
+    }
+
+    status = pdev_.GetInterrupt(0, &irq_);
+    if (status != ZX_OK) {
+        return status;
+    }
+
+    status = DdkAdd("dwc2");
+    if (status != ZX_OK) {
+        return status;
+    }
+    return ZX_OK;
+}
+
+void Dwc2::DdkUnbind() {
+    irq_.destroy();
+    thrd_join(irq_thread_, nullptr);
+}
+
+void Dwc2::DdkRelease() {
+    delete this;
+}
+
+int Dwc2::IrqThread() {
+    return 0;
+}
+
+void Dwc2::UsbDciRequestQueue(usb_request_t* req, const usb_request_complete_t* cb) {
+/*
+    auto* ep = EndpointFromAddress(req->header.ep_address);
+    if (ep == nullptr) {
+        usb_request_complete(req, ZX_ERR_INVALID_ARGS, 0, cb);
+        return;
+    }
+
+    fbl::AutoLock lock(&ep->lock);
+
+    if (!ep->enabled) {
+        lock.release();
+        usb_request_complete(req, ZX_ERR_BAD_STATE, 0, cb);
+        return;
+    }
+
+    ep->queued_reqs.push(Request(req, *cb, sizeof(usb_request_t)));
+    EpQueueNextLocked(ep);
+*/
+}
+
+zx_status_t Dwc2::UsbDciSetInterface(const usb_dci_interface_protocol_t* interface) {
+    // TODO - handle interface == nullptr for tear down path?
+
+    if (dci_intf_.has_value()) {
+        zxlogf(ERROR, "%s: dci_intf_ already set\n", __func__);
+        return ZX_ERR_BAD_STATE;
+    }
+
+    dci_intf_ = ddk::UsbDciInterfaceProtocolClient(interface);
+
+    // Now that the usb-peripheral driver has bound, we can start things up.
+    int rc = thrd_create_with_name(&irq_thread_,
+                                   [](void* arg) -> int {
+                                       return reinterpret_cast<Dwc2*>(arg)->IrqThread();
+                                   },
+                                   reinterpret_cast<void*>(this),
+                                   "mt-usb-irq-thread");
+    if (rc != thrd_success) {
+        return ZX_ERR_INTERNAL;
+    }
+
+    return ZX_OK;
+}
+
+ zx_status_t Dwc2::UsbDciConfigEp(const usb_endpoint_descriptor_t* ep_desc,
+                                   const usb_ss_ep_comp_descriptor_t* ss_comp_desc) {
+    return ZX_OK;
+}
+
+zx_status_t Dwc2::UsbDciDisableEp(uint8_t ep_address) {
+    return ZX_OK;
+}
+
+zx_status_t Dwc2::UsbDciEpSetStall(uint8_t ep_address) {
+    return ZX_OK;
+}
+
+zx_status_t Dwc2::UsbDciEpClearStall(uint8_t ep_address) {
+
+    return ZX_OK;
+}
+
+size_t Dwc2::UsbDciGetRequestSize() {
+    return Request::RequestSize(sizeof(usb_request_t));
+}
+
+zx_status_t Dwc2::UsbDciCancelAll(uint8_t ep) {
+    return ZX_OK;
+}
+
+
 static zx_driver_ops_t driver_ops = [](){
     zx_driver_ops_t ops = {};
     ops.version = DRIVER_OPS_VERSION;
