@@ -167,6 +167,16 @@ public:
     static auto Get() { return hwreg::RegisterAddr<GRXSTSP>(0x20); }
 };
 
+class GNPTXSTS : public hwreg::RegisterBase<GNPTXSTS, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(15, 0, nptxfspcavail);
+    DEF_FIELD(23, 16, nptxqspcavail);
+    DEF_BIT(24, nptxqtop_terminate);
+    DEF_FIELD(26, 25, nptxqtop_token);
+    DEF_FIELD(30, 27, nptxqtop_chnep);
+    static auto Get() { return hwreg::RegisterAddr<GNPTXSTS>(0x2C); }
+};
+
 union dwc_grxstsp_t {
     uint32_t val;
     struct {
@@ -487,38 +497,6 @@ typedef union {
 	};
 } dwc_pcgcctl_t;
 
-class GNPTXSTS : public hwreg::RegisterBase<GNPTXSTS, uint32_t, hwreg::EnablePrinter> {
-public:
-    DEF_FIELD(15, 0, nptxfspcavail);
-    DEF_FIELD(23, 16, nptxqspcavail);
-    DEF_BIT(24, nptxqtop_terminate);
-    DEF_FIELD(26, 25, nptxqtop_token);
-    DEF_FIELD(30, 27, nptxqtop_chnep);
-};
-
-union dwc_gnptxsts_t {
-    uint32_t val;
-    struct {
-		uint32_t nptxfspcavail:16;
-		uint32_t nptxqspcavail:8;
-		/** Top of the Non-Periodic Transmit Request Queue
-		 *	- bit 24 - Terminate (Last entry for the selected
-		 *	  channel/EP)
-		 *	- bits 26:25 - Token Type
-		 *	  - 2'b00 - IN/OUT
-		 *	  - 2'b01 - Zero Length OUT
-		 *	  - 2'b10 - PING/Complete Split
-		 *	  - 2'b11 - Channel Halt
-		 *	- bits 30:27 - Channel/EP Number
-		 */
-		uint32_t nptxqtop_terminate:1;
-		uint32_t nptxqtop_token:2;
-		uint32_t nptxqtop_chnep:4;
-		uint32_t reserved:1;
-	};
-    dwc_gnptxsts_t(volatile dwc_gnptxsts_t& r) { val = r.val; }
-};
-
 typedef union  {
     uint32_t val;
     struct {
@@ -551,7 +529,7 @@ typedef volatile struct {
 	// Non Periodic Transmit FIFO Size Register
     dwc_fifosiz_t gnptxfsiz;
 	// Non Periodic Transmit FIFO/Queue Status Register
-    dwc_gnptxsts_t gnptxsts;
+    uint32_t gnptxsts;
     // I2C Access Register
     uint32_t gi2cctl;
 	// PHY Vendor Control Register

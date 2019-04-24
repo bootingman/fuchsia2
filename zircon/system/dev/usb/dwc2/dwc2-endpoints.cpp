@@ -9,6 +9,7 @@
 bool dwc_ep_write_packet(dwc_usb_t* dwc, uint8_t ep_num) {
     dwc_regs_t* regs = dwc->regs;
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
+    auto* mmio = dwc->mmio();
 
 	uint32_t len = ep->req_length - ep->req_offset;
 	if (len > ep->max_packet_size)
@@ -17,9 +18,10 @@ bool dwc_ep_write_packet(dwc_usb_t* dwc, uint8_t ep_num) {
 	uint32_t dwords = (len + 3) >> 2;
     uint8_t *req_buffer = &ep->req_buffer[ep->req_offset];
 
-    dwc_gnptxsts_t txstatus = regs->gnptxsts;
-	while  (ep->req_offset < ep->req_length && txstatus.nptxqspcavail > 0 && txstatus.nptxfspcavail > dwords) {
-zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_num, txstatus.nptxqspcavail, txstatus.nptxfspcavail, dwords);
+    auto txstatus = GNPTXSTS::Get().ReadFrom(mmio);
+
+	while  (ep->req_offset < ep->req_length && txstatus.nptxqspcavail() > 0 && txstatus.nptxfspcavail() > dwords) {
+zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_num, txstatus.nptxqspcavail(), txstatus.nptxfspcavail(), dwords);
 
     	volatile uint32_t* fifo = DWC_REG_DATA_FIFO(regs, ep_num);
     
@@ -37,7 +39,7 @@ zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_
 			len = ep->max_packet_size;
 
 	    dwords = (len + 3) >> 2;
-		txstatus.val = regs->gnptxsts.val;
+		txstatus.ReadFrom(mmio);
 	}
 
     if (ep->req_offset < ep->req_length) {
