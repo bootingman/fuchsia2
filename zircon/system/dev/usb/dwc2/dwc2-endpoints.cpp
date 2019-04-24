@@ -311,7 +311,7 @@ void dwc_ep_queue(dwc_usb_t* dwc, uint8_t ep_num, usb_request_t* req) {
 
 zx_status_t dwc_ep_config(dwc_usb_t* dwc, const usb_endpoint_descriptor_t* ep_desc,
                           const usb_ss_ep_comp_descriptor_t* ss_comp_desc) {
-    dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
     // convert address to index in range 0 - 31
     // low bit is IN/OUT
@@ -331,14 +331,6 @@ zxlogf(LINFO, "dwc_ep_config address %02x ep_num %d\n", ep_desc->bEndpointAddres
 
     mtx_lock(&ep->lock);
 
-    volatile dwc_depctl_t* depctl_ptr;
-
-    if (DWC_EP_IS_IN(ep_num)) {
-        depctl_ptr = &regs->depin[ep_num].diepctl;
-    } else {
-        depctl_ptr = &regs->depout[ep_num - 16].doepctl;
-    }
-
     ep->max_packet_size = usb_ep_max_packet(ep_desc);
     ep->type = ep_type;
     ep->interval = ep_desc->bInterval;
@@ -346,15 +338,15 @@ zxlogf(LINFO, "dwc_ep_config address %02x ep_num %d\n", ep_desc->bEndpointAddres
 
     ep->enabled = true;
 
-    dwc_depctl_t depctl = *depctl_ptr;
+    auto depctl = DEPCTL::Get(ep_num).ReadFrom(mmio);
 
-    depctl.mps = usb_ep_max_packet(ep_desc);
-	depctl.eptype = usb_ep_type(ep_desc);
-	depctl.setd0pid = 1;
-	depctl.txfnum = 0;   //Non-Periodic TxFIFO
-	depctl.usbactep = 1;
+    depctl.set_mps(usb_ep_max_packet(ep_desc));
+	depctl.set_eptype(usb_ep_type(ep_desc));
+	depctl.set_setd0pid(1);
+	depctl.set_txfnum(0);   //Non-Periodic TxFIFO
+	depctl.set_usbactep(1);
 
-    depctl_ptr->val = depctl.val;
+    depctl.WriteTo(mmio);
 
     dwc_enable_ep(dwc, ep_num, true);
 
