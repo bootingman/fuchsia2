@@ -174,6 +174,12 @@ public:
     static auto Get() { return hwreg::RegisterAddr<GRXSTSP>(0x20); }
 };
 
+class GRXFSIZ : public hwreg::RegisterBase<GRXFSIZ, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(31, 0, size);
+    static auto Get() { return hwreg::RegisterAddr<GRXFSIZ>(0x24); }
+};
+
 class GNPTXFSIZ : public hwreg::RegisterBase<GNPTXFSIZ, uint32_t, hwreg::EnablePrinter> {
 public:
     DEF_FIELD(15, 0, startaddr);
@@ -343,135 +349,14 @@ public:
     static auto Get() { return hwreg::RegisterAddr<DOEPMSK>(0x814); }
 };
 
-typedef struct {
-	/* Device IN Endpoint Control Register */
-	uint32_t diepctl;
-	uint32_t reserved;
-	/* Device IN Endpoint Interrupt Register */
-	uint32_t diepint;
-	uint32_t reserved2;
+class DAINT : public hwreg::RegisterBase<DAINT, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(31, 0, enable);
+    static auto Get() { return hwreg::RegisterAddr<DAINT>(0x818); }
+};
 
-	/* Device IN Endpoint Transfer Size */
-	uint32_t dieptsiz;
-	/* Device IN Endpoint DMA Address Register */
-	uint32_t diepdma;
-	/* Device IN Endpoint Transmit FIFO Status Register */
-	uint32_t dtxfsts;
-	/* Device IN Endpoint DMA Buffer Register */
-	uint32_t diepdmab;
-} dwc_depin_t;
-
-typedef struct {
-	/* Device OUT Endpoint Control Register */
-	uint32_t doepctl;
-	uint32_t reserved;
-	/* Device OUT Endpoint Interrupt Register */
-	uint32_t doepint;
-	uint32_t reserved2;
-
-	/* Device OUT Endpoint Transfer Size Register */
-	uint32_t doeptsiz;
-	/* Device OUT Endpoint DMA Address Register */
-	uint32_t doepdma;
-	uint32_t reserved3;
-	/* Device OUT Endpoint DMA Buffer Register */
-	uint32_t doepdmab;
-} dwc_depout_t;
-
-
-typedef volatile struct {
-    // OTG Control and Status Register
-    uint32_t gotgctl;
-    // OTG Interrupt Register
-    uint32_t gotgint;
-    // Core AHB Configuration Register
-    uint32_t gahbcfg;
-    // Core USB Configuration Register
-    uint32_t gusbcfg;
-
-    // Core Reset Register
-    uint32_t grstctl;
-    // Core Interrupt Register
-    uint32_t gintsts;
-    // Core Interrupt Mask Register
-    uint32_t gintmsk;
-	// Receive Status Queue Read Register
-    uint32_t grxstsr;
-
-	// Receive Status Queue Read & POP Register
-    uint32_t grxstsp;
-	// Receive FIFO Size Register
-    uint32_t grxfsiz;
-	// Non Periodic Transmit FIFO Size Register
-    uint32_t gnptxfsiz;
-	// Non Periodic Transmit FIFO/Queue Status Register
-    uint32_t gnptxsts;
-
-    // I2C Access Register
-    uint32_t gi2cctl;
-	// PHY Vendor Control Register
-	uint32_t gpvndctl;
-	// General Purpose Input/Output Register
-	uint32_t ggpio;
-	// User ID Register
-	uint32_t guid;
-	// Synopsys ID Register (Read Only)
-	uint32_t gsnpsid;
-	// User HW Config1 Register (Read Only)
-	uint32_t ghwcfg1;
-	// User HW Config2 Register (Read Only)
-	uint32_t ghwcfg2;
-	// User HW Config3 Register (Read Only)
-	uint32_t ghwcfg3;
-	// User HW Config4 Register (Read Only)
-	uint32_t ghwcfg4;
-
-    uint32_t reserved_030[(0x800 - 0x054) / sizeof(uint32_t)];
-
-    // Device Configuration Register
-    uint32_t dcfg;
-    // Device Control Register
-    uint32_t dctl;
-    // Device Status Register
-    uint32_t dsts;
-    uint32_t unused;
-    // Device IN Endpoint Common Interrupt Mask Register
-    uint32_t diepmsk;
-    // Device OUT Endpoint Common Interrupt Mask Register
-    uint32_t doepmsk;
-    // Device All Endpoints Interrupt Register
-    uint32_t daint;
-    //Device All Endpoints Interrupt Mask Register
-    uint32_t daintmsk;
-    // Device IN Token Queue Read Register-1
-    uint32_t dtknqr1;
-    // Device IN Token Queue Read Register-2
-    uint32_t dtknqr2;
-    // Device VBUS discharge Register
-    uint32_t dvbusdis;
-    // Device VBUS pulse Register
-    uint32_t dvbuspulse;
-    // Device IN Token Queue Read Register-3 / Device Thresholding control register
-    uint32_t dtknqr3_dthrctl;
-    // Device IN Token Queue Read Register-4 / Device IN EPs empty Inr. Mask Register
-    uint32_t dtknqr4_fifoemptymsk;
-    // Device Each Endpoint Interrupt Register
-    uint32_t deachint;
-    //: Device Each Endpoint Interrupt Mask Register
-    uint32_t deachintmsk;
-    // Device Each In Endpoint Interrupt Mask Register
-    uint32_t diepeachintmsk[MAX_EPS_CHANNELS];
-    // Device Each Out Endpoint Interrupt Mask Register
-    uint32_t doepeachintmsk[MAX_EPS_CHANNELS];
-
-    uint32_t reserved_0x8C0[(0x900 - 0x8C0) / sizeof(uint32_t)];
-
-    dwc_depin_t depin[MAX_EPS_CHANNELS];
-
-    dwc_depout_t depout[MAX_EPS_CHANNELS];
-
-    uint32_t reserved_0xD00[(0xE00 - 0xD00) / sizeof(uint32_t)];
-
-    uint32_t pcgcctl;
-
-} dwc_regs_t;
+class DAINTMSK : public hwreg::RegisterBase<DAINTMSK, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(31, 0, mask);
+    static auto Get() { return hwreg::RegisterAddr<DAINTMSK>(0x81C); }
+};

@@ -92,7 +92,7 @@ typedef struct {
 //    usb_mode_t usb_mode;
 
     std::optional<ddk::MmioBuffer> mmio_;
-    dwc_regs_t* regs;
+    volatile void* regs;
 
     inline ddk::MmioBuffer* mmio() {
         return &*mmio_;

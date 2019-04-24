@@ -32,7 +32,6 @@ static zx_status_t usb_dwc_softreset_core(dwc_usb_t* dwc) {
 }
 
 static zx_status_t usb_dwc_setupcontroller(dwc_usb_t* dwc) {
-    dwc_regs_t* regs = dwc->regs;
     auto* mmio = dwc->mmio();
 
     GUSBCFG::Get().ReadFrom(mmio).set_force_dev_mode(1).WriteTo(mmio);
@@ -50,10 +49,12 @@ printf("did regs->gahbcfg.dmaenable\n");
 	DCTL::Get().ReadFrom(mmio).set_sftdiscon(0).WriteTo(mmio);
 
     // reset phy clock
-    regs->pcgcctl = 0;
+// needed?    regs->pcgcctl = 0;
 
-    regs->grxfsiz = 256;    //???
+    // RX fifo size
+    GRXFSIZ::Get().FromValue(0).set_size(256).WriteTo(mmio);
 
+    // TX fifo size
     GNPTXFSIZ::Get().FromValue(0).set_depth(256).set_startaddr(256).WriteTo(mmio);
 
 	dwc_flush_fifo(dwc, 0x10);
@@ -63,8 +64,8 @@ printf("did regs->gahbcfg.dmaenable\n");
 	/* Clear all pending Device Interrupts */
     DIEPMSK::Get().FromValue(0).WriteTo(mmio);
     DOEPMSK::Get().FromValue(0).WriteTo(mmio);
-	regs->daint = 0xffffffff;
-	regs->daintmsk = 0;
+    DAINT::Get().FromValue(0xffffffff).WriteTo(mmio);
+    DAINTMSK::Get().FromValue(0).WriteTo(mmio);
 
     for (int i = 0; i < DWC_MAX_EPS; i++) {
         DEPCTL::Get(i).FromValue(0).WriteTo(mmio);
@@ -95,9 +96,9 @@ printf("did regs->gahbcfg.dmaenable\n");
 	gintmsk.set_sessreqintr(1);
 */
 
-printf("ghwcfg1 %08x ghwcfg2 %08x ghwcfg3 %08x\n", regs->ghwcfg1, regs->ghwcfg2, regs->ghwcfg3);
+//printf("ghwcfg1 %08x ghwcfg2 %08x ghwcfg3 %08x\n", regs->ghwcfg1, regs->ghwcfg2, regs->ghwcfg3);
 
-	regs->gotgint = 0xFFFFFFF;
+// do we need this?	regs->gotgint = 0xFFFFFFF;
     GINTSTS::Get().FromValue(0xFFFFFFF).WriteTo(mmio);
 
 zxlogf(LINFO, "enabling interrupts %08x\n", gintmsk.reg_value());
@@ -309,7 +310,7 @@ static zx_status_t dwc_bind(void* ctx, zx_device_t* dev) {
         zxlogf(ERROR, "usb_dwc: pdev_map_mmio_buffer failed\n");
         goto error_return;
     }
-    dwc->regs = static_cast<dwc_regs_t*>(dwc->mmio_->get());
+    dwc->regs = static_cast<volatile void*>(dwc->mmio_->get());
 
     status = pdev_get_bti(&dwc->pdev, 0, &dwc->bti_handle);
     if (status != ZX_OK) {

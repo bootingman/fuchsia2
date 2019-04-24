@@ -6,7 +6,7 @@
 
 #include "dwc2.h"
 
-static void dwc_ep_read_packet(dwc_regs_t* regs, void* buffer, uint32_t length, uint8_t ep_num) {
+static void dwc_ep_read_packet(volatile void* regs, void* buffer, uint32_t length, uint8_t ep_num) {
     uint32_t count = (length + 3) >> 2;
     uint32_t* dest = (uint32_t*)buffer;
 	volatile uint32_t* fifo = DWC_REG_DATA_FIFO(regs, ep_num);
@@ -277,7 +277,6 @@ void dwc_flush_fifo(dwc_usb_t* dwc, const int num) {
 }
 
 static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
-    dwc_regs_t* regs = dwc->regs;
     auto* mmio = dwc->mmio();
 
 	zxlogf(LINFO, "\nUSB RESET\n");
@@ -307,7 +306,7 @@ static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
     GRSTCTL::Get().ReadFrom(dwc->mmio()).set_intknqflsh(1).WriteTo(dwc->mmio());
 
     // EPO IN and OUT
-	regs->daintmsk = (1 < DWC_EP_IN_SHIFT) | (1 < DWC_EP_OUT_SHIFT);
+    DAINT::Get().FromValue((1 < DWC_EP_IN_SHIFT) | (1 < DWC_EP_OUT_SHIFT)).WriteTo(mmio);
 
     DOEPMSK::Get().FromValue(0).set_setup(1).set_xfercompl(1).set_ahberr(1).set_epdisabled(1).WriteTo(mmio);
     DIEPMSK::Get().FromValue(0).set_xfercompl(1).set_timeout(1).set_ahberr(1).set_epdisabled(1).WriteTo(mmio);
@@ -375,7 +374,7 @@ static void dwc_handle_enumdone_irq(dwc_usb_t* dwc) {
 }
 
 static void dwc_handle_rxstsqlvl_irq(dwc_usb_t* dwc) {
-    dwc_regs_t* regs = dwc->regs;
+    auto* regs = dwc->regs;
     auto* mmio = dwc->mmio();
 
 //why?	regs->gintmsk.rxstsqlvl = 0;
@@ -433,17 +432,16 @@ break;
 }
 
 static void dwc_handle_inepintr_irq(dwc_usb_t* dwc) {
-    dwc_regs_t* regs = dwc->regs;
     auto* mmio = dwc->mmio();
 
 printf("dwc_handle_inepintr_irq\n");
 	for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
         uint32_t bit = 1 << ep_num;
-        uint32_t daint = regs->daint;
-        if ((daint & bit) == 0) {
+        auto daint = DAINT::Get().ReadFrom(mmio);
+        if ((daint.enable() & bit) == 0) {
             continue;
         }
-        regs->daint |= bit;
+        daint.set_enable(daint.enable() | bit).WriteTo(mmio);        
 
         auto diepint = DIEPINT::Get(ep_num).ReadFrom(mmio);
 
@@ -496,7 +494,6 @@ printf("diepint.inepnakeff ep_num %u\n", ep_num);
 }
 
 static void dwc_handle_outepintr_irq(dwc_usb_t* dwc) {
-    dwc_regs_t* regs = dwc->regs;
     auto* mmio = dwc->mmio();
 
 //zxlogf(LINFO, "dwc_handle_outepintr_irq\n");
@@ -504,11 +501,11 @@ static void dwc_handle_outepintr_irq(dwc_usb_t* dwc) {
 	uint8_t ep_num = 0;
 
 	/* Read in the device interrupt bits */
-	uint32_t ep_intr = regs->daint & DWC_EP_OUT_MASK;
+	uint32_t ep_intr = DAINT::Get().ReadFrom(mmio).enable() & DWC_EP_OUT_MASK;
 	ep_intr >>= DWC_EP_OUT_SHIFT;
 
 	/* Clear the interrupt */
-	regs->daint = DWC_EP_OUT_MASK;
+	DAINT::Get().FromValue(DWC_EP_OUT_MASK).WriteTo(mmio);
 
 	while (ep_intr) {
 		if (ep_intr & 1) {
@@ -557,9 +554,10 @@ zxlogf(LINFO, "dwc_handle_outepintr_irq ahberr\n");
 
 static void dwc_handle_nptxfempty_irq(dwc_usb_t* dwc) {
     bool need_more = false;
-    dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
+
 	for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
-	    if (regs->daintmsk & (1 << ep_num)) {
+	    if (DAINTMSK::Get().ReadFrom(mmio).mask() & (1 << ep_num)) {
             if (dwc_ep_write_packet(dwc, ep_num)) {
                 need_more = true;
             }

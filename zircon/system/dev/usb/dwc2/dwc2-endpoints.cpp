@@ -7,7 +7,7 @@
 #include "dwc2.h"
 
 bool dwc_ep_write_packet(dwc_usb_t* dwc, uint8_t ep_num) {
-    dwc_regs_t* regs = dwc->regs;
+    auto* regs = dwc->regs;
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
     auto* mmio = dwc->mmio();
 
@@ -201,18 +201,22 @@ static void dwc_ep_end_transfers(dwc_usb_t* dwc, unsigned ep_num, zx_status_t re
 }
 
 static void dwc_enable_ep(dwc_usb_t* dwc, unsigned ep_num, bool enable) {
-    dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
     mtx_lock(&dwc->lock);
 
     uint32_t bit = 1 << ep_num;
 
+    auto mask = DAINTMSK::Get().ReadFrom(mmio).reg_value();
     if (enable) {
-        regs->daint |= bit;
-        regs->daintmsk |= bit;
+        auto daint = DAINT::Get().ReadFrom(mmio).reg_value();
+        daint |= bit;
+        mask &= ~bit;
+        DAINT::Get().FromValue(daint).WriteTo(mmio);
     } else {
-        regs->daintmsk &= ~bit;
+        mask |= bit;
     }
+    DAINTMSK::Get().FromValue(mask).WriteTo(mmio);
 
     mtx_unlock(&dwc->lock);
 }
@@ -229,11 +233,11 @@ static void dwc_ep_set_config(dwc_usb_t* dwc, unsigned ep_num, bool enable) {
 
 
 void dwc_reset_configuration(dwc_usb_t* dwc) {
-    dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
     mtx_lock(&dwc->lock);
     // disable all endpoints except EP0_OUT and EP0_IN
-    regs->daint = 1;
+    DAINT::Get().FromValue(1).WriteTo(mmio);
     mtx_unlock(&dwc->lock);
 
 #if SINGLE_EP_IN_QUEUE
