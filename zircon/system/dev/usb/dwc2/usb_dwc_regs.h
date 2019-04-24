@@ -376,6 +376,40 @@ public:
     static auto Get() { return hwreg::RegisterAddr<DSTS>(0x808); }
 };
 
+class DIEPMSK : public hwreg::RegisterBase<DIEPMSK, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, xfercompl);
+    DEF_BIT(1, epdisabled);
+    DEF_BIT(2, ahberr);
+    DEF_BIT(3, timeout);
+    DEF_BIT(4, intktxfemp);
+    DEF_BIT(5, intknepmis);
+    DEF_BIT(6, inepnakeff);
+    DEF_BIT(8, txfifoundrn);
+    DEF_BIT(9, bna);
+    DEF_BIT(13, nak);
+    static auto Get() { return hwreg::RegisterAddr<DIEPMSK>(0x810); }
+};
+
+class DOEPMSK : public hwreg::RegisterBase<DOEPMSK, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, xfercompl);
+    DEF_BIT(1, epdisabled);
+    DEF_BIT(2, ahberr);
+    DEF_BIT(3, setup);
+    DEF_BIT(4, outtknepdis);
+    DEF_BIT(5, stsphsercvd);
+    DEF_BIT(6, back2backsetup);
+    DEF_BIT(8, outpkterr);
+    DEF_BIT(9, bna);
+    DEF_BIT(11, pktdrpsts);
+    DEF_BIT(12, babble);
+    DEF_BIT(13, nak);
+    DEF_BIT(14, nyet);
+    DEF_BIT(15, sr);
+    static auto Get() { return hwreg::RegisterAddr<DOEPMSK>(0x814); }
+};
+
 typedef struct {
 	/* Device IN Endpoint Control Register */
 	uint32_t diepctl;
@@ -469,9 +503,9 @@ typedef volatile struct {
     uint32_t dsts;
     uint32_t unused;
     // Device IN Endpoint Common Interrupt Mask Register
-    dwc_diepint_t diepmsk;
+    uint32_t diepmsk;
     // Device OUT Endpoint Common Interrupt Mask Register
-    dwc_doepint_t doepmsk;
+    uint32_t doepmsk;
     // Device All Endpoints Interrupt Register
     uint32_t daint;
     //Device All Endpoints Interrupt Mask Register

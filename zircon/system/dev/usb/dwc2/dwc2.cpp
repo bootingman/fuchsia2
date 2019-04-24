@@ -61,8 +61,8 @@ printf("did regs->gahbcfg.dmaenable\n");
     GRSTCTL::Get().ReadFrom(mmio).set_intknqflsh(1).WriteTo(mmio);
 
 	/* Clear all pending Device Interrupts */
-	regs->diepmsk.val = 0;
-	regs->doepmsk.val = 0;
+    DIEPMSK::Get().FromValue(0).WriteTo(mmio);
+    DOEPMSK::Get().FromValue(0).WriteTo(mmio);
 	regs->daint = 0xffffffff;
 	regs->daintmsk = 0;
 

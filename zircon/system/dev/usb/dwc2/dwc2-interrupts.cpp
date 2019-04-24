@@ -323,19 +323,8 @@ static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
     // EPO IN and OUT
 	regs->daintmsk = (1 < DWC_EP_IN_SHIFT) | (1 < DWC_EP_OUT_SHIFT);
 
-    dwc_doepint_t doepmsk;
-	doepmsk.setup = 1;
-	doepmsk.xfercompl = 1;
-	doepmsk.ahberr = 1;
-	doepmsk.epdisabled = 1;
-	regs->doepmsk.val = doepmsk.val;
-
-    dwc_diepint_t diepmsk;
-	diepmsk.xfercompl = 1;
-	diepmsk.timeout = 1;
-	diepmsk.epdisabled = 1;
-	diepmsk.ahberr = 1;
-	regs->diepmsk.val = diepmsk.val;
+    DOEPMSK::Get().FromValue(0).set_setup(1).set_xfercompl(1).set_ahberr(1).set_epdisabled(1).WriteTo(mmio);
+    DIEPMSK::Get().FromValue(0).set_xfercompl(1).set_timeout(1).set_ahberr(1).set_epdisabled(1).WriteTo(mmio);
 
 	/* Reset Device Address */
     DCFG::Get().ReadFrom(mmio).set_devaddr(0).WriteTo(mmio);
@@ -522,6 +511,7 @@ printf("diepint.inepnakeff ep_num %u\n", ep_num);
 
 static void dwc_handle_outepintr_irq(dwc_usb_t* dwc) {
     dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
 //zxlogf(LINFO, "dwc_handle_outepintr_irq\n");
 
@@ -537,7 +527,7 @@ static void dwc_handle_outepintr_irq(dwc_usb_t* dwc) {
 	while (ep_intr) {
 		if (ep_intr & 1) {
 		    dwc_doepint_t doepint = regs->depout[ep_num].doepint;
-		    doepint.val &= regs->doepmsk.val;
+		    doepint.val &= DOEPMSK::Get().ReadFrom(mmio).reg_value();
 if (ep_num > 0) zxlogf(LINFO, "dwc_handle_outepintr_irq doepint.val %08x\n", doepint.val);
 
 			/* Transfer complete */
