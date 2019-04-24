@@ -17,20 +17,20 @@
 #include <ddk/debug.h>
 #include <ddk/device.h>
 #include <ddk/mmio-buffer.h>
-#include <ddk/platform-defs.h>
-#include <ddk/protocol/platform/device.h>
-#include <ddk/protocol/usb/dci.h>
-#include <ddk/protocol/usb/modeswitch.h>
-#include <ddk/protocol/usb.h>
+#include <ddktl/pdev.h>
+#include <ddktl/device.h>
+#include <ddktl/protocol/platform/device.h>
+#include <ddktl/protocol/usb/dci.h>
+#include <ddktl/protocol/usb.h>
 #include <lib/mmio/mmio.h>
+#include <usb/request-cpp.h>
 
 // Zircon USB includes
 #include <zircon/hw/usb.h>
 
-#include <zircon/listnode.h>
-#include <zircon/process.h>
-
 #include "usb_dwc_regs.h"
+
+namespace dwc2 {
 
 #define MMIO_INDEX  0
 #define IRQ_INDEX   0
@@ -141,3 +141,54 @@ zx_status_t dwc_ep_set_stall(dwc_usb_t* dwc, uint8_t ep_num, bool stall);
 zx_status_t dwc_irq_start(dwc_usb_t* dwc);
 void dwc_irq_stop(dwc_usb_t* dwc);
 void dwc_flush_fifo(dwc_usb_t* dwc, const int num);
+
+
+
+
+
+class Dwc2;
+using Dwc2Type = ddk::Device<Dwc2, ddk::Unbindable>;
+
+class Dwc2 : public Dwc2Type, public ddk::UsbDciProtocol<Dwc2, ddk::base_protocol> {
+public:
+    explicit Dwc2(zx_device_t* parent, pdev_protocol_t* pdev)
+        : Dwc2Type(parent), pdev_(pdev) {}
+
+    static zx_status_t Create(void* ctx, zx_device_t* parent);
+
+    // Device protocol implementation.
+    void DdkUnbind();
+    void DdkRelease();
+
+    // USB DCI protocol implementation.
+     void UsbDciRequestQueue(usb_request_t* req, const usb_request_complete_t* cb);
+     zx_status_t UsbDciSetInterface(const usb_dci_interface_protocol_t* interface);
+     zx_status_t UsbDciConfigEp(const usb_endpoint_descriptor_t* ep_desc, const
+                                usb_ss_ep_comp_descriptor_t* ss_comp_desc);
+     zx_status_t UsbDciDisableEp(uint8_t ep_address);
+     zx_status_t UsbDciEpSetStall(uint8_t ep_address);
+     zx_status_t UsbDciEpClearStall(uint8_t ep_address);
+     size_t UsbDciGetRequestSize();
+     zx_status_t UsbDciCancelAll(uint8_t ep_address);
+
+private:
+    DISALLOW_COPY_ASSIGN_AND_MOVE(Dwc2);
+
+    using Request = usb::UnownedRequest<void>;
+    using RequestQueue = usb::UnownedRequestQueue<void>;
+
+    inline ddk::MmioBuffer* mmio() {
+        return &*mmio_;
+    }
+
+    ddk::PDev pdev_;
+    std::optional<ddk::UsbDciInterfaceProtocolClient> dci_intf_;
+
+    std::optional<ddk::MmioBuffer> mmio_;
+
+    zx::interrupt irq_;
+    thrd_t irq_thread_;
+};
+
+} // namespace dwc2
+

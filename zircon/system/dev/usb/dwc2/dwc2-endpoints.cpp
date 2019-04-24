@@ -6,47 +6,49 @@
 
 #include "dwc2.h"
 
+namespace dwc2 {
+
 bool dwc_ep_write_packet(dwc_usb_t* dwc, uint8_t ep_num) {
     auto* regs = dwc->regs;
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
     auto* mmio = dwc->mmio();
 
-	uint32_t len = ep->req_length - ep->req_offset;
-	if (len > ep->max_packet_size)
-		len = ep->max_packet_size;
+    uint32_t len = ep->req_length - ep->req_offset;
+    if (len > ep->max_packet_size)
+        len = ep->max_packet_size;
 
-	uint32_t dwords = (len + 3) >> 2;
+    uint32_t dwords = (len + 3) >> 2;
     uint8_t *req_buffer = &ep->req_buffer[ep->req_offset];
 
     auto txstatus = GNPTXSTS::Get().ReadFrom(mmio);
 
-	while  (ep->req_offset < ep->req_length && txstatus.nptxqspcavail() > 0 && txstatus.nptxfspcavail() > dwords) {
+    while  (ep->req_offset < ep->req_length && txstatus.nptxqspcavail() > 0 && txstatus.nptxfspcavail() > dwords) {
 zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_num, txstatus.nptxqspcavail(), txstatus.nptxfspcavail(), dwords);
 
-    	volatile uint32_t* fifo = DWC_REG_DATA_FIFO(regs, ep_num);
+        volatile uint32_t* fifo = DWC_REG_DATA_FIFO(regs, ep_num);
     
-    	for (uint32_t i = 0; i < dwords; i++) {
-    		uint32_t temp = *((uint32_t*)req_buffer);
+        for (uint32_t i = 0; i < dwords; i++) {
+            uint32_t temp = *((uint32_t*)req_buffer);
 //zxlogf(LINFO, "write %08x\n", temp);
-    		*fifo = temp;
-    		req_buffer += 4;
-    	}
+            *fifo = temp;
+            req_buffer += 4;
+        }
     
-    	ep->req_offset += len;
+        ep->req_offset += len;
 
-	    len = ep->req_length - ep->req_offset;
-		if (len > ep->max_packet_size)
-			len = ep->max_packet_size;
+        len = ep->req_length - ep->req_offset;
+        if (len > ep->max_packet_size)
+            len = ep->max_packet_size;
 
-	    dwords = (len + 3) >> 2;
-		txstatus.ReadFrom(mmio);
-	}
+        dwords = (len + 3) >> 2;
+        txstatus.ReadFrom(mmio);
+    }
 
     if (ep->req_offset < ep->req_length) {
         // enable txempty
-	    zxlogf(LINFO, "turn on nptxfempty\n");
-	    GINTMSK::Get().ReadFrom(dwc->mmio()).set_nptxfempty(1).WriteTo(dwc->mmio());
-		return true;
+        zxlogf(LINFO, "turn on nptxfempty\n");
+        GINTMSK::Get().ReadFrom(dwc->mmio()).set_nptxfempty(1).WriteTo(dwc->mmio());
+        return true;
     } else {
         return false;
     }
@@ -58,14 +60,14 @@ zxlogf(LINFO, "dwc_ep_start_transfer epnum %u length %u\n", ep_num, length);
     auto* mmio = dwc->mmio();
     bool is_in = DWC_EP_IS_IN(ep_num);
 
-	uint32_t ep_mps = ep->max_packet_size;
+    uint32_t ep_mps = ep->max_packet_size;
 
     ep->req_offset = 0;
     ep->req_length = static_cast<uint32_t>(length);
 
     auto deptsiz = DEPTSIZ::Get(ep_num).ReadFrom(mmio);
 
-	/* Zero Length Packet? */
+    /* Zero Length Packet? */
     if (length == 0) {
         deptsiz.set_xfersize(is_in ? 0 : ep_mps);
         deptsiz.set_pktcnt(1);
@@ -83,11 +85,11 @@ zxlogf(LINFO, "epnum %d is_in %d xfer_count %d xfer_len %d pktcnt %d xfersize %d
 
     deptsiz.WriteTo(mmio);
 
-	/* EP enable */
+    /* EP enable */
     auto depctl = DEPCTL::Get(ep_num).ReadFrom(mmio);
-	depctl.set_cnak(1);
-	depctl.set_epena(1);
-	depctl.WriteTo(mmio);
+    depctl.set_cnak(1);
+    depctl.set_epena(1);
+    depctl.WriteTo(mmio);
 
     if (is_in) {
         dwc_ep_write_packet(dwc, ep_num);
@@ -98,7 +100,7 @@ void dwc_complete_ep(dwc_usb_t* dwc, uint8_t ep_num) {
     zxlogf(LINFO, "XXXXX dwc_complete_ep ep_num %u\n", ep_num);
 
     if (ep_num != 0) {
-    	dwc_endpoint_t* ep = &dwc->eps[ep_num];
+        dwc_endpoint_t* ep = &dwc->eps[ep_num];
         usb_request_t* req = ep->current_req;
 
         if (req) {
@@ -117,36 +119,36 @@ void dwc_complete_ep(dwc_usb_t* dwc, uint8_t ep_num) {
         ep->req_buffer = NULL;
         ep->req_offset = 0;
         ep->req_length = 0;
-	}
+    }
 
 /*
-	u32 epnum = ep_num;
-	if (ep_num) {
-		if (!is_in)
-			epnum = ep_num + 1;
-	}
+    u32 epnum = ep_num;
+    if (ep_num) {
+        if (!is_in)
+            epnum = ep_num + 1;
+    }
 */
 
 
 /*
-	if (is_in) {
-		pcd->dwc_eps[epnum].req->actual = ep->xfer_len;
-		deptsiz.d32 = dwc_read_reg32(DWC_REG_IN_EP_TSIZE(ep_num));
-		if (deptsiz.b.xfersize == 0 && deptsiz.b.pktcnt == 0 &&
+    if (is_in) {
+        pcd->dwc_eps[epnum].req->actual = ep->xfer_len;
+        deptsiz.d32 = dwc_read_reg32(DWC_REG_IN_EP_TSIZE(ep_num));
+        if (deptsiz.b.xfersize == 0 && deptsiz.b.pktcnt == 0 &&
                     ep->xfer_count == ep->xfer_len) {
-			ep->start_xfer_buff = 0;
-			ep->xfer_buff = 0;
-			ep->xfer_len = 0;
-		}
-		pcd->dwc_eps[epnum].req->status = 0;
-	} else {
-		deptsiz.d32 = dwc_read_reg32(DWC_REG_OUT_EP_TSIZE(ep_num));
-		pcd->dwc_eps[epnum].req->actual = ep->xfer_count;
-		ep->start_xfer_buff = 0;
-		ep->xfer_buff = 0;
-		ep->xfer_len = 0;
-		pcd->dwc_eps[epnum].req->status = 0;
-	}
+            ep->start_xfer_buff = 0;
+            ep->xfer_buff = 0;
+            ep->xfer_len = 0;
+        }
+        pcd->dwc_eps[epnum].req->status = 0;
+    } else {
+        deptsiz.d32 = dwc_read_reg32(DWC_REG_OUT_EP_TSIZE(ep_num));
+        pcd->dwc_eps[epnum].req->actual = ep->xfer_count;
+        ep->start_xfer_buff = 0;
+        ep->xfer_buff = 0;
+        ep->xfer_len = 0;
+        pcd->dwc_eps[epnum].req->status = 0;
+    }
 */
 }
 
@@ -175,7 +177,7 @@ printf("dwc_ep_queue_next_locked current_req %p req_int %p\n", ep->current_req, 
         usb_request_mmap(req, (void **)&ep->req_buffer);
         ep->send_zlp = req->header.send_zlp && (req->header.length % ep->max_packet_size) == 0;
 
-	    dwc_ep_start_transfer(dwc, ep->ep_num, static_cast<uint32_t>(req->header.length));
+        dwc_ep_start_transfer(dwc, ep->ep_num, static_cast<uint32_t>(req->header.length));
     }
 }
 
@@ -332,10 +334,10 @@ zxlogf(LINFO, "dwc_ep_config address %02x ep_num %d\n", ep_desc->bEndpointAddres
     auto depctl = DEPCTL::Get(ep_num).ReadFrom(mmio);
 
     depctl.set_mps(usb_ep_max_packet(ep_desc));
-	depctl.set_eptype(usb_ep_type(ep_desc));
-	depctl.set_setd0pid(1);
-	depctl.set_txfnum(0);   //Non-Periodic TxFIFO
-	depctl.set_usbactep(1);
+    depctl.set_eptype(usb_ep_type(ep_desc));
+    depctl.set_setd0pid(1);
+    depctl.set_txfnum(0);   //Non-Periodic TxFIFO
+    depctl.set_usbactep(1);
 
     depctl.WriteTo(mmio);
 
@@ -396,3 +398,5 @@ zx_status_t dwc_ep_set_stall(dwc_usb_t* dwc, uint8_t ep_num, bool stall) {
 
     return ZX_OK;
 }
+
+} // namespace dwc2

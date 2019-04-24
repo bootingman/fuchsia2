@@ -5,10 +5,13 @@
 #include "dwc2.h"
 
 #include <ddk/binding.h>
+#include <ddk/platform-defs.h>
 #include <ddk/protocol/platform-device-lib.h>
 #include <ddktl/pdev.h>
 #include <ddktl/protocol/platform/device.h>
 #include <usb/usb-request.h>
+
+namespace dwc2 {
 
 static zx_status_t usb_dwc_softreset_core(dwc_usb_t* dwc) {
 /* do we need this? */
@@ -45,8 +48,8 @@ printf("did regs->gahbcfg.dmaenable\n");
 #endif
 
     // ???
-	DCTL::Get().ReadFrom(mmio).set_sftdiscon(1).WriteTo(mmio);
-	DCTL::Get().ReadFrom(mmio).set_sftdiscon(0).WriteTo(mmio);
+    DCTL::Get().ReadFrom(mmio).set_sftdiscon(1).WriteTo(mmio);
+    DCTL::Get().ReadFrom(mmio).set_sftdiscon(0).WriteTo(mmio);
 
     // reset phy clock
 // needed?    regs->pcgcctl = 0;
@@ -57,11 +60,11 @@ printf("did regs->gahbcfg.dmaenable\n");
     // TX fifo size
     GNPTXFSIZ::Get().FromValue(0).set_depth(256).set_startaddr(256).WriteTo(mmio);
 
-	dwc_flush_fifo(dwc, 0x10);
+    dwc_flush_fifo(dwc, 0x10);
 
     GRSTCTL::Get().ReadFrom(mmio).set_intknqflsh(1).WriteTo(mmio);
 
-	/* Clear all pending Device Interrupts */
+    /* Clear all pending Device Interrupts */
     DIEPMSK::Get().FromValue(0).WriteTo(mmio);
     DOEPMSK::Get().FromValue(0).WriteTo(mmio);
     DAINT::Get().FromValue(0xffffffff).WriteTo(mmio);
@@ -88,17 +91,17 @@ printf("did regs->gahbcfg.dmaenable\n");
 
 
 /*
-	gintmsk.set_modemismatch(1);
-	gintmsk.set_otgintr(1);
-	gintmsk.set_conidstschng(1);
-	gintmsk.set_wkupintr(1);
-	gintmsk.set_disconnect(0);
-	gintmsk.set_sessreqintr(1);
+    gintmsk.set_modemismatch(1);
+    gintmsk.set_otgintr(1);
+    gintmsk.set_conidstschng(1);
+    gintmsk.set_wkupintr(1);
+    gintmsk.set_disconnect(0);
+    gintmsk.set_sessreqintr(1);
 */
 
 //printf("ghwcfg1 %08x ghwcfg2 %08x ghwcfg3 %08x\n", regs->ghwcfg1, regs->ghwcfg2, regs->ghwcfg3);
 
-// do we need this?	regs->gotgint = 0xFFFFFFF;
+// do we need this? regs->gotgint = 0xFFFFFFF;
     GINTSTS::Get().FromValue(0xFFFFFFF).WriteTo(mmio);
 
 zxlogf(LINFO, "enabling interrupts %08x\n", gintmsk.reg_value());
@@ -362,16 +365,18 @@ error_return:
     return status;
 }
 
-static zx_driver_ops_t dwc2_driver_ops = [](){
+static zx_driver_ops_t driver_ops = [](){
     zx_driver_ops_t ops = {};
     ops.version = DRIVER_OPS_VERSION;
     ops.bind = dwc_bind;
     return ops;
 }();
 
+} // namespace dwc2
+
 // The formatter does not play nice with these macros.
 // clang-format off
-ZIRCON_DRIVER_BEGIN(dwc2, dwc2_driver_ops, "zircon", "0.1", 3)
+ZIRCON_DRIVER_BEGIN(dwc2, dwc2::driver_ops, "zircon", "0.1", 3)
     BI_ABORT_IF(NE, BIND_PLATFORM_DEV_VID, PDEV_VID_GENERIC),
     BI_ABORT_IF(NE, BIND_PLATFORM_DEV_PID, PDEV_PID_GENERIC),
     BI_MATCH_IF(EQ, BIND_PLATFORM_DEV_DID, PDEV_DID_USB_DWC2),

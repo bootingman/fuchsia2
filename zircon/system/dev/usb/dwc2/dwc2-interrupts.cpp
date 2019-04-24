@@ -6,15 +6,17 @@
 
 #include "dwc2.h"
 
+namespace dwc2 {
+
 static void dwc_ep_read_packet(volatile void* regs, void* buffer, uint32_t length, uint8_t ep_num) {
     uint32_t count = (length + 3) >> 2;
     uint32_t* dest = (uint32_t*)buffer;
-	volatile uint32_t* fifo = DWC_REG_DATA_FIFO(regs, ep_num);
+    volatile uint32_t* fifo = DWC_REG_DATA_FIFO(regs, ep_num);
 
-	for (uint32_t i = 0; i < count; i++) {
-	    *dest++ = *fifo;
+    for (uint32_t i = 0; i < count; i++) {
+        *dest++ = *fifo;
 zxlogf(LSPEW, "read %08x\n", dest[-1]);
-	}
+    }
 }
 
 static void dwc_set_address(dwc_usb_t* dwc, uint8_t address) {
@@ -31,10 +33,10 @@ static void dwc2_ep0_out_start(dwc_usb_t* dwc)  {
 
     auto doeptsize0 = DEPTSIZ0::Get().FromValue(0);
 
-	doeptsize0.set_supcnt(3);
-	doeptsize0.set_pktcnt(1);
-	doeptsize0.set_xfersize(8 * 3);
-	doeptsize0.WriteTo(mmio);
+    doeptsize0.set_supcnt(3);
+    doeptsize0.set_pktcnt(1);
+    doeptsize0.set_xfersize(8 * 3);
+    doeptsize0.WriteTo(mmio);
 
 //??    dwc->ep0_state = EP0_STATE_IDLE;
 
@@ -45,12 +47,12 @@ static void do_setup_status_phase(dwc_usb_t* dwc, bool is_in) {
 //zxlogf(LINFO, "do_setup_status_phase is_in: %d\n", is_in);
 //     dwc_endpoint_t* ep = &dwc->eps[0];
 
-	dwc->ep0_state = EP0_STATE_STATUS;
+    dwc->ep0_state = EP0_STATE_STATUS;
 
-	dwc_ep_start_transfer(dwc, (is_in ? DWC_EP0_IN : DWC_EP0_OUT), 0);
+    dwc_ep_start_transfer(dwc, (is_in ? DWC_EP0_IN : DWC_EP0_OUT), 0);
 
-	/* Prepare for more SETUP Packets */
-	dwc2_ep0_out_start(dwc);
+    /* Prepare for more SETUP Packets */
+    dwc2_ep0_out_start(dwc);
 }
 
 static void dwc_ep0_complete_request(dwc_usb_t* dwc) {
@@ -63,45 +65,45 @@ static void dwc_ep0_complete_request(dwc_usb_t* dwc) {
 // this interferes with zero length OUT
 //    } else if ( ep->req_length == 0) {
 //zxlogf(LINFO, "dwc_ep0_complete_request ep->req_length == 0\n");
-//		dwc_otg_ep_start_transfer(ep);
+//      dwc_otg_ep_start_transfer(ep);
     } else if (dwc->ep0_state == EP0_STATE_DATA_IN) {
 //zxlogf(LINFO, "dwc_ep0_complete_request EP0_STATE_DATA_IN\n");
- 	   if (ep->req_offset >= ep->req_length) {
-	        do_setup_status_phase(dwc, false);
+       if (ep->req_offset >= ep->req_length) {
+            do_setup_status_phase(dwc, false);
        }
     } else {
 //zxlogf(LINFO, "dwc_ep0_complete_request ep0-OUT\n");
-	    do_setup_status_phase(dwc, true);
+        do_setup_status_phase(dwc, true);
     }
 
 #if 0
-	deptsiz0_data_t deptsiz;
-	dwc_ep_t* ep = &pcd->dwc_eps[0].dwc_ep;
-	int ret = 0;
+    deptsiz0_data_t deptsiz;
+    dwc_ep_t* ep = &pcd->dwc_eps[0].dwc_ep;
+    int ret = 0;
 
-	if (EP0_STATUS == pcd->ep0state) {
-		ep->start_xfer_buff = 0;
-		ep->xfer_buff = 0;
-		ep->xfer_len = 0;
-		ep->num = 0;
-		ret = 1;
-	} else if (0 == ep->xfer_len) {
-		ep->xfer_len = 0;
-		ep->xfer_count = 0;
-		ep->sent_zlp = 1;
-		ep->num = 0;
-		dwc_otg_ep_start_transfer(ep);
-		ret = 1;
-	} else if (ep->is_in) {
-		deptsiz.d32 = dwc_read_reg32(DWC_REG_IN_EP_TSIZE(0));
-		if (0 == deptsiz.b.xfersize) {
-			/* Is a Zero Len Packet needed? */
-			do_setup_status_phase(pcd, 0);
-		}
-	} else {
-		/* ep0-OUT */
-		do_setup_status_phase(pcd, 1);
-	}
+    if (EP0_STATUS == pcd->ep0state) {
+        ep->start_xfer_buff = 0;
+        ep->xfer_buff = 0;
+        ep->xfer_len = 0;
+        ep->num = 0;
+        ret = 1;
+    } else if (0 == ep->xfer_len) {
+        ep->xfer_len = 0;
+        ep->xfer_count = 0;
+        ep->sent_zlp = 1;
+        ep->num = 0;
+        dwc_otg_ep_start_transfer(ep);
+        ret = 1;
+    } else if (ep->is_in) {
+        deptsiz.d32 = dwc_read_reg32(DWC_REG_IN_EP_TSIZE(0));
+        if (0 == deptsiz.b.xfersize) {
+            /* Is a Zero Len Packet needed? */
+            do_setup_status_phase(pcd, 0);
+        }
+    } else {
+        /* ep0-OUT */
+        do_setup_status_phase(pcd, 1);
+    }
 
 #endif
 }
@@ -164,21 +166,21 @@ static zx_status_t dwc_handle_setup(dwc_usb_t* dwc, usb_setup_t* setup, void* bu
 static void pcd_setup(dwc_usb_t* dwc) {
     usb_setup_t* setup = &dwc->cur_setup;
 
-	if (!dwc->got_setup) {
+    if (!dwc->got_setup) {
 //zxlogf(LINFO, "no setup\n");
-		return;
-	}
-	dwc->got_setup = false;
-//	_pcd->status = 0;
+        return;
+    }
+    dwc->got_setup = false;
+//    _pcd->status = 0;
 
 
-	if (setup->bmRequestType & USB_DIR_IN) {
+    if (setup->bmRequestType & USB_DIR_IN) {
 //zxlogf(LINFO, "pcd_setup set EP0_STATE_DATA_IN\n");
-		dwc->ep0_state = EP0_STATE_DATA_IN;
-	} else {
+        dwc->ep0_state = EP0_STATE_DATA_IN;
+    } else {
 //zxlogf(LINFO, "pcd_setup set EP0_STATE_DATA_OUT\n");
-		dwc->ep0_state = EP0_STATE_DATA_OUT;
-	}
+        dwc->ep0_state = EP0_STATE_DATA_OUT;
+    }
 
     if (setup->wLength > 0 && dwc->ep0_state == EP0_STATE_DATA_OUT) {
 //zxlogf(LINFO, "queue read\n");
@@ -201,7 +203,7 @@ static void pcd_setup(dwc_usb_t* dwc) {
             dwc->ep0_state = EP0_STATE_DATA_IN;
             dwc_ep_start_transfer(dwc, DWC_EP0_IN, static_cast<uint32_t>(actual));
         } else {
-			dwc_ep0_complete_request(dwc);
+            dwc_ep0_complete_request(dwc);
         }
     }
 }
@@ -210,68 +212,68 @@ static void pcd_setup(dwc_usb_t* dwc) {
 static void dwc_handle_ep0(dwc_usb_t* dwc) {
 //    zxlogf(LINFO, "dwc_handle_ep0\n");
 
-	switch (dwc->ep0_state) {
-	case EP0_STATE_IDLE: {
+    switch (dwc->ep0_state) {
+    case EP0_STATE_IDLE: {
 //zxlogf(LINFO, "dwc_handle_ep0 EP0_STATE_IDLE\n");
-//		req_flag->request_config = 0;
-		pcd_setup(dwc);
+//        req_flag->request_config = 0;
+        pcd_setup(dwc);
         break;
     }
-	case EP0_STATE_DATA_IN:
+    case EP0_STATE_DATA_IN:
 //    zxlogf(LINFO, "dwc_handle_ep0 EP0_STATE_DATA_IN\n");
-//		if (ep0->xfer_count < ep0->total_len)
-//			zxlogf(LINFO, "FIX ME!! dwc_otg_ep0_continue_transfer!\n");
-//		else
-			dwc_ep0_complete_request(dwc);
-		break;
-	case EP0_STATE_DATA_OUT:
+//        if (ep0->xfer_count < ep0->total_len)
+//            zxlogf(LINFO, "FIX ME!! dwc_otg_ep0_continue_transfer!\n");
+//        else
+            dwc_ep0_complete_request(dwc);
+        break;
+    case EP0_STATE_DATA_OUT:
 //    zxlogf(LINFO, "dwc_handle_ep0 EP0_STATE_DATA_OUT\n");
-		dwc_ep0_complete_request(dwc);
-		break;
-	case EP0_STATE_STATUS:
+        dwc_ep0_complete_request(dwc);
+        break;
+    case EP0_STATE_STATUS:
 //    zxlogf(LINFO, "dwc_handle_ep0 EP0_STATE_STATUS\n");
-		dwc_ep0_complete_request(dwc);
-		/* OUT for next SETUP */
-		dwc->ep0_state = EP0_STATE_IDLE;
-//		ep0->stopped = 1;
-//		ep0->is_in = 0;
-		break;
+        dwc_ep0_complete_request(dwc);
+        /* OUT for next SETUP */
+        dwc->ep0_state = EP0_STATE_IDLE;
+//        ep0->stopped = 1;
+//        ep0->is_in = 0;
+        break;
 
-	case EP0_STATE_STALL:
-	default:
-		zxlogf(LINFO, "EP0 state is %d, should not get here pcd_setup()\n", dwc->ep0_state);
-		break;
+    case EP0_STATE_STALL:
+    default:
+        zxlogf(LINFO, "EP0 state is %d, should not get here pcd_setup()\n", dwc->ep0_state);
+        break;
     }
 }
 
 void dwc_flush_fifo(dwc_usb_t* dwc, const int num) {
     auto grstctl = GRSTCTL::Get().ReadFrom(dwc->mmio());
 
-	grstctl.set_txfflsh(1);
-	grstctl.set_txfnum(num);
-	grstctl.WriteTo(dwc->mmio());
-	
+    grstctl.set_txfflsh(1);
+    grstctl.set_txfnum(num);
+    grstctl.WriteTo(dwc->mmio());
+    
     uint32_t count = 0;
-	do {
-	    grstctl.ReadFrom(dwc->mmio());
-		if (++count > 10000)
-			break;
-	} while (grstctl.txfflsh() == 1);
+    do {
+        grstctl.ReadFrom(dwc->mmio());
+        if (++count > 10000)
+            break;
+    } while (grstctl.txfflsh() == 1);
 
     zx_nanosleep(zx_deadline_after(ZX_USEC(1)));
 
-	if (num == 0) {
-		return;
+    if (num == 0) {
+        return;
     }
 
     grstctl.set_reg_value(0).set_rxfflsh(1).WriteTo(dwc->mmio());
 
-	count = 0;
-	do {
-	    grstctl.ReadFrom(dwc->mmio());
-		if (++count > 10000)
-			break;
-	} while (grstctl.txfflsh() == 1);
+    count = 0;
+    do {
+        grstctl.ReadFrom(dwc->mmio());
+        if (++count > 10000)
+            break;
+    } while (grstctl.txfflsh() == 1);
 
     zx_nanosleep(zx_deadline_after(ZX_USEC(1)));
 }
@@ -279,15 +281,15 @@ void dwc_flush_fifo(dwc_usb_t* dwc, const int num) {
 static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
     auto* mmio = dwc->mmio();
 
-	zxlogf(LINFO, "\nUSB RESET\n");
+    zxlogf(LINFO, "\nUSB RESET\n");
 
     dwc->ep0_state = EP0_STATE_DISCONNECTED;
 
-	/* Clear the Remote Wakeup Signalling */
-	DCTL::Get().ReadFrom(mmio).set_rmtwkupsig(1).WriteTo(mmio);
+    /* Clear the Remote Wakeup Signalling */
+    DCTL::Get().ReadFrom(mmio).set_rmtwkupsig(1).WriteTo(mmio);
 
-	for (int i = 0; i < MAX_EPS_CHANNELS; i++) {
-	    auto diepctl = DEPCTL::Get(i).ReadFrom(mmio);
+    for (int i = 0; i < MAX_EPS_CHANNELS; i++) {
+        auto diepctl = DEPCTL::Get(i).ReadFrom(mmio);
 
         if (diepctl.epena()) {
             // disable all active IN EPs
@@ -297,12 +299,12 @@ static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
         }
 
         DEPCTL::Get(i + 16).ReadFrom(mmio).set_snak(1).WriteTo(mmio);
-	}
+    }
 
-	/* Flush the NP Tx FIFO */
-	dwc_flush_fifo(dwc, 0);
+    /* Flush the NP Tx FIFO */
+    dwc_flush_fifo(dwc, 0);
 
-	/* Flush the Learning Queue */
+    /* Flush the Learning Queue */
     GRSTCTL::Get().ReadFrom(dwc->mmio()).set_intknqflsh(1).WriteTo(dwc->mmio());
 
     // EPO IN and OUT
@@ -311,11 +313,11 @@ static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
     DOEPMSK::Get().FromValue(0).set_setup(1).set_xfercompl(1).set_ahberr(1).set_epdisabled(1).WriteTo(mmio);
     DIEPMSK::Get().FromValue(0).set_xfercompl(1).set_timeout(1).set_ahberr(1).set_epdisabled(1).WriteTo(mmio);
 
-	/* Reset Device Address */
+    /* Reset Device Address */
     DCFG::Get().ReadFrom(mmio).set_devaddr(0).WriteTo(mmio);
 
-	/* setup EP0 to receive SETUP packets */
-	dwc2_ep0_out_start(dwc);
+    /* setup EP0 to receive SETUP packets */
+    dwc2_ep0_out_start(dwc);
 
     // TODO how to detect disconnect?
     usb_dci_interface_set_connected(&dwc->dci_intf, true);
@@ -324,7 +326,7 @@ static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
 static void dwc_handle_enumdone_irq(dwc_usb_t* dwc) {
     auto* mmio = dwc->mmio();
 
-	zxlogf(INFO, "dwc_handle_enumdone_irq\n");
+    zxlogf(INFO, "dwc_handle_enumdone_irq\n");
 
 /*
     if (dwc->astro_usb.ops) {
@@ -339,33 +341,33 @@ static void dwc_handle_enumdone_irq(dwc_usb_t* dwc) {
     DEPCTL::Get(16).ReadFrom(mmio).set_epena(1).WriteTo(mmio);
 
 #if 0 // astro future use
-	depctl.d32 = dwc_read_reg32(DWC_REG_IN_EP_REG(1));
-	if (!depctl.b.usbactep) {
-		depctl.b.mps = BULK_EP_MPS;
-		depctl.b.eptype = 2;//BULK_STYLE
-		depctl.b.setd0pid = 1;
-		depctl.b.txfnum = 0;   //Non-Periodic TxFIFO
-		depctl.b.usbactep = 1;
-		dwc_write_reg32(DWC_REG_IN_EP_REG(1), depctl.d32);
-	}
+    depctl.d32 = dwc_read_reg32(DWC_REG_IN_EP_REG(1));
+    if (!depctl.b.usbactep) {
+        depctl.b.mps = BULK_EP_MPS;
+        depctl.b.eptype = 2;//BULK_STYLE
+        depctl.b.setd0pid = 1;
+        depctl.b.txfnum = 0;   //Non-Periodic TxFIFO
+        depctl.b.usbactep = 1;
+        dwc_write_reg32(DWC_REG_IN_EP_REG(1), depctl.d32);
+    }
 
-	depctl.d32 = dwc_read_reg32(DWC_REG_OUT_EP_REG(2));
-	if (!depctl.b.usbactep) {
-		depctl.b.mps = BULK_EP_MPS;
-		depctl.b.eptype = 2;//BULK_STYLE
-		depctl.b.setd0pid = 1;
-		depctl.b.txfnum = 0;   //Non-Periodic TxFIFO
-		depctl.b.usbactep = 1;
-		dwc_write_reg32(DWC_REG_OUT_EP_REG(2), depctl.d32);
-	}
+    depctl.d32 = dwc_read_reg32(DWC_REG_OUT_EP_REG(2));
+    if (!depctl.b.usbactep) {
+        depctl.b.mps = BULK_EP_MPS;
+        depctl.b.eptype = 2;//BULK_STYLE
+        depctl.b.setd0pid = 1;
+        depctl.b.txfnum = 0;   //Non-Periodic TxFIFO
+        depctl.b.usbactep = 1;
+        dwc_write_reg32(DWC_REG_OUT_EP_REG(2), depctl.d32);
+    }
 #endif
 
-	DCTL::Get().ReadFrom(mmio).set_cgnpinnak(1).WriteTo(mmio);
+    DCTL::Get().ReadFrom(mmio).set_cgnpinnak(1).WriteTo(mmio);
 
-	/* high speed */
+    /* high speed */
 #if 0 // astro
     GUSBCFG::Get().ReadFrom(dwc->mmio).set_usbtrdtim(9).WriteTo(dwc->mmio);
-	regs->gusbcfg.usbtrdtim = 9;
+    regs->gusbcfg.usbtrdtim = 9;
 #else
     GUSBCFG::Get().ReadFrom(dwc->mmio()).set_usbtrdtim(5).WriteTo(dwc->mmio());
 #endif
@@ -377,10 +379,10 @@ static void dwc_handle_rxstsqlvl_irq(dwc_usb_t* dwc) {
     auto* regs = dwc->regs;
     auto* mmio = dwc->mmio();
 
-//why?	regs->gintmsk.rxstsqlvl = 0;
+//why?    regs->gintmsk.rxstsqlvl = 0;
 
-	/* Get the Status from the top of the FIFO */
-	auto grxstsp = GRXSTSP::Get().ReadFrom(mmio);
+    /* Get the Status from the top of the FIFO */
+    auto grxstsp = GRXSTSP::Get().ReadFrom(mmio);
 zxlogf(LINFO, "dwc_handle_rxstsqlvl_irq epnum: %u bcnt: %u pktsts: %u\n", grxstsp.epnum(), grxstsp.bcnt(), grxstsp.pktsts());
 
     auto ep_num = grxstsp.epnum();
@@ -389,22 +391,22 @@ zxlogf(LINFO, "dwc_handle_rxstsqlvl_irq epnum: %u bcnt: %u pktsts: %u\n", grxsts
     }
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
 
-	switch (grxstsp.pktsts()) {
-	case DWC_STS_DATA_UPDT: {
-	    uint32_t fifo_count = grxstsp.bcnt();
+    switch (grxstsp.pktsts()) {
+    case DWC_STS_DATA_UPDT: {
+        uint32_t fifo_count = grxstsp.bcnt();
 zxlogf(LINFO, "DWC_STS_DATA_UPDT grxstsp.bcnt: %u\n", grxstsp.bcnt());
         if (fifo_count > ep->req_length - ep->req_offset) {
 zxlogf(LINFO, "fifo_count %u > %u\n", fifo_count, ep->req_length - ep->req_offset);
             fifo_count = ep->req_length - ep->req_offset;
         }
-		if (fifo_count > 0) {
-			dwc_ep_read_packet(regs, ep->req_buffer + ep->req_offset, fifo_count, static_cast<uint8_t>(ep_num));
-			ep->req_offset += fifo_count;
-		}
-		break;
+        if (fifo_count > 0) {
+            dwc_ep_read_packet(regs, ep->req_buffer + ep->req_offset, fifo_count, static_cast<uint8_t>(ep_num));
+            ep->req_offset += fifo_count;
+        }
+        break;
     }
 
-	case DWC_DSTS_SETUP_UPDT: {
+    case DWC_DSTS_SETUP_UPDT: {
 //zxlogf(LINFO, "DWC_DSTS_SETUP_UPDT\n"); 
     volatile uint32_t* fifo = (uint32_t *)((uint8_t *)regs + 0x1000);
     uint32_t* dest = (uint32_t*)&dwc->cur_setup;
@@ -414,28 +416,28 @@ zxlogf(LINFO, "SETUP bmRequestType: 0x%02x bRequest: %u wValue: %u wIndex: %u wL
        dwc->cur_setup.bmRequestType, dwc->cur_setup.bRequest, dwc->cur_setup.wValue,
        dwc->cur_setup.wIndex, dwc->cur_setup.wLength); 
        dwc->got_setup = true;
-		break;
-	}
+        break;
+    }
 
-	case DWC_DSTS_GOUT_NAK:
+    case DWC_DSTS_GOUT_NAK:
 zxlogf(LINFO, "DWC_DSTS_GOUT_NAK\n");
 break;
-	case DWC_STS_XFER_COMP:
+    case DWC_STS_XFER_COMP:
 //zxlogf(LINFO, "DWC_STS_XFER_COMP\n");
 break;
-	case DWC_DSTS_SETUP_COMP:
+    case DWC_DSTS_SETUP_COMP:
 //zxlogf(LINFO, "DWC_DSTS_SETUP_COMP\n");
 break;
-	default:
-		break;
-	}
+    default:
+        break;
+    }
 }
 
 static void dwc_handle_inepintr_irq(dwc_usb_t* dwc) {
     auto* mmio = dwc->mmio();
 
 printf("dwc_handle_inepintr_irq\n");
-	for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
+    for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
         uint32_t bit = 1 << ep_num;
         auto daint = DAINT::Get().ReadFrom(mmio);
         if ((daint.enable() & bit) == 0) {
@@ -445,52 +447,52 @@ printf("dwc_handle_inepintr_irq\n");
 
         auto diepint = DIEPINT::Get(ep_num).ReadFrom(mmio);
 
-		/* Transfer complete */
-		if (diepint.xfercompl()) {
+        /* Transfer complete */
+        if (diepint.xfercompl()) {
 if (ep_num > 0) zxlogf(LINFO, "dwc_handle_inepintr_irq xfercompl ep_num %u\n", ep_num);
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_xfercompl(1).WriteTo(mmio);
-//				regs->depin[ep_num].diepint.xfercompl = 1;
-			/* Complete the transfer */
-			if (0 == ep_num) {
-				dwc_handle_ep0(dwc);
-			} else {
-				dwc_complete_ep(dwc, ep_num);
-				if (diepint.nak()) {
+//                regs->depin[ep_num].diepint.xfercompl = 1;
+            /* Complete the transfer */
+            if (0 == ep_num) {
+                dwc_handle_ep0(dwc);
+            } else {
+                dwc_complete_ep(dwc, ep_num);
+                if (diepint.nak()) {
 printf("diepint.nak ep_num %u\n", ep_num);
                     DIEPINT::Get(ep_num).ReadFrom(mmio).set_nak(1).WriteTo(mmio);
-			    }
-			}
-		}
-		/* Endpoint disable  */
-		if (diepint.epdisabled()) {
-			/* Clear the bit in DIEPINTn for this interrupt */
+                }
+            }
+        }
+        /* Endpoint disable  */
+        if (diepint.epdisabled()) {
+            /* Clear the bit in DIEPINTn for this interrupt */
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_epdisabled(1).WriteTo(mmio);
-		}
-		/* AHB Error */
-		if (diepint.ahberr()) {
-			/* Clear the bit in DIEPINTn for this interrupt */
+        }
+        /* AHB Error */
+        if (diepint.ahberr()) {
+            /* Clear the bit in DIEPINTn for this interrupt */
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_ahberr(1).WriteTo(mmio);
-		}
-		/* TimeOUT Handshake (non-ISOC IN EPs) */
-		if (diepint.timeout()) {
-//				handle_in_ep_timeout_intr(ep_num);
+        }
+        /* TimeOUT Handshake (non-ISOC IN EPs) */
+        if (diepint.timeout()) {
+//                handle_in_ep_timeout_intr(ep_num);
 zxlogf(LINFO, "TODO handle_in_ep_timeout_intr\n");
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_timeout(1).WriteTo(mmio);
-		}
-		/** IN Token received with TxF Empty */
-		if (diepint.intktxfemp()) {
+        }
+        /** IN Token received with TxF Empty */
+        if (diepint.intktxfemp()) {
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_intktxfemp(1).WriteTo(mmio);
-		}
-		/** IN Token Received with EP mismatch */
-		if (diepint.intknepmis()) {
+        }
+        /** IN Token Received with EP mismatch */
+        if (diepint.intknepmis()) {
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_intknepmis(1).WriteTo(mmio);
-		}
-		/** IN Endpoint NAK Effective */
-		if (diepint.inepnakeff()) {
+        }
+        /** IN Endpoint NAK Effective */
+        if (diepint.inepnakeff()) {
 printf("diepint.inepnakeff ep_num %u\n", ep_num);
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_inepnakeff(1).WriteTo(mmio);
-		}
-	}
+        }
+    }
 }
 
 static void dwc_handle_outepintr_irq(dwc_usb_t* dwc) {
@@ -498,75 +500,75 @@ static void dwc_handle_outepintr_irq(dwc_usb_t* dwc) {
 
 //zxlogf(LINFO, "dwc_handle_outepintr_irq\n");
 
-	uint8_t ep_num = 0;
+    uint8_t ep_num = 0;
 
-	/* Read in the device interrupt bits */
-	uint32_t ep_intr = DAINT::Get().ReadFrom(mmio).enable() & DWC_EP_OUT_MASK;
-	ep_intr >>= DWC_EP_OUT_SHIFT;
+    /* Read in the device interrupt bits */
+    uint32_t ep_intr = DAINT::Get().ReadFrom(mmio).enable() & DWC_EP_OUT_MASK;
+    ep_intr >>= DWC_EP_OUT_SHIFT;
 
-	/* Clear the interrupt */
-	DAINT::Get().FromValue(DWC_EP_OUT_MASK).WriteTo(mmio);
+    /* Clear the interrupt */
+    DAINT::Get().FromValue(DWC_EP_OUT_MASK).WriteTo(mmio);
 
-	while (ep_intr) {
-		if (ep_intr & 1) {
-		    auto doepint = DOEPINT::Get(ep_num).ReadFrom(mmio);
-		    doepint.set_reg_value(doepint.reg_value() & DOEPMSK::Get().ReadFrom(mmio).reg_value());
+    while (ep_intr) {
+        if (ep_intr & 1) {
+            auto doepint = DOEPINT::Get(ep_num).ReadFrom(mmio);
+            doepint.set_reg_value(doepint.reg_value() & DOEPMSK::Get().ReadFrom(mmio).reg_value());
 if (ep_num > 0) zxlogf(LINFO, "dwc_handle_outepintr_irq doepint.val %08x\n", doepint.reg_value());
 
-			/* Transfer complete */
-			if (doepint.xfercompl()) {
+            /* Transfer complete */
+            if (doepint.xfercompl()) {
 if (ep_num > 0) zxlogf(LINFO, "dwc_handle_outepintr_irq xfercompl\n");
-				/* Clear the bit in DOEPINTn for this interrupt */
+                /* Clear the bit in DOEPINTn for this interrupt */
                 DOEPINT::Get(ep_num).ReadFrom(mmio).set_xfercompl(1).WriteTo(mmio);
 
-				if (ep_num == 0) {
-				    if (doepint.setup()) { // astro
+                if (ep_num == 0) {
+                    if (doepint.setup()) { // astro
                         DOEPINT::Get(ep_num).ReadFrom(mmio).set_setup(1).WriteTo(mmio);
-    			    }
-					dwc_handle_ep0(dwc);
-				} else {
-					dwc_complete_ep(dwc, ep_num);
-				}
-			}
-			/* Endpoint disable  */
-			if (doepint.epdisabled()) {
+                    }
+                    dwc_handle_ep0(dwc);
+                } else {
+                    dwc_complete_ep(dwc, ep_num);
+                }
+            }
+            /* Endpoint disable  */
+            if (doepint.epdisabled()) {
 zxlogf(LINFO, "dwc_handle_outepintr_irq epdisabled\n");
-				/* Clear the bit in DOEPINTn for this interrupt */
+                /* Clear the bit in DOEPINTn for this interrupt */
                 DOEPINT::Get(ep_num).ReadFrom(mmio).set_epdisabled(1).WriteTo(mmio);
-			}
-			/* AHB Error */
-			if (doepint.ahberr()) {
+            }
+            /* AHB Error */
+            if (doepint.ahberr()) {
 zxlogf(LINFO, "dwc_handle_outepintr_irq ahberr\n");
                 DOEPINT::Get(ep_num).ReadFrom(mmio).set_ahberr(1).WriteTo(mmio);
-			}
-			/* Setup Phase Done (contr0l EPs) */
-			if (doepint.setup()) {
-			    if (1) { // astro
-					dwc_handle_ep0(dwc);
-				}
+            }
+            /* Setup Phase Done (contr0l EPs) */
+            if (doepint.setup()) {
+                if (1) { // astro
+                    dwc_handle_ep0(dwc);
+                }
                 DOEPINT::Get(ep_num).ReadFrom(mmio).set_setup(1).WriteTo(mmio);
-			}
-		}
-		ep_num++;
-		ep_intr >>= 1;
-	}
+            }
+        }
+        ep_num++;
+        ep_intr >>= 1;
+    }
 }
 
 static void dwc_handle_nptxfempty_irq(dwc_usb_t* dwc) {
     bool need_more = false;
     auto* mmio = dwc->mmio();
 
-	for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
-	    if (DAINTMSK::Get().ReadFrom(mmio).mask() & (1 << ep_num)) {
+    for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
+        if (DAINTMSK::Get().ReadFrom(mmio).mask() & (1 << ep_num)) {
             if (dwc_ep_write_packet(dwc, ep_num)) {
                 need_more = true;
             }
         }
-	}
-	if (!need_more) {
-	    zxlogf(LINFO, "turn off nptxfempty\n");
-	    GINTMSK::Get().ReadFrom(dwc->mmio()).set_nptxfempty(0).WriteTo(dwc->mmio());
-	}
+    }
+    if (!need_more) {
+        zxlogf(LINFO, "turn off nptxfempty\n");
+        GINTMSK::Get().ReadFrom(dwc->mmio()).set_nptxfempty(0).WriteTo(dwc->mmio());
+    }
 }
 
 static void dwc_handle_usbsuspend_irq(dwc_usb_t* dwc) {
@@ -676,3 +678,4 @@ void dwc_irq_stop(dwc_usb_t* dwc) {
     dwc->irq_handle = ZX_HANDLE_INVALID;
 }
 
+} // namespace dwc2
