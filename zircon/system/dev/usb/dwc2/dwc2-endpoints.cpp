@@ -63,24 +63,6 @@ zxlogf(LINFO, "dwc_ep_start_transfer epnum %u length %u\n", ep_num, length);
     ep->req_offset = 0;
     ep->req_length = static_cast<uint32_t>(length);
 
-/*
-	volatile dwc_depctl_t* depctl_reg;
-	volatile dwc_deptsiz_t* deptsiz_reg;
-
-	if (is_in) {
-		depctl_reg = &regs->depin[ep_num].diepctl;
-		deptsiz_reg = &regs->depin[ep_num].dieptsiz;
-	} else {
-	    if (ep_num > 0) {
-	        ep_num = static_cast<uint8_t>(ep_num - 16);
-	    }
-		depctl_reg = &regs->depout[ep_num].doepctl;
-		deptsiz_reg = &regs->depout[ep_num].doeptsiz;
-	}
-
-    dwc_depctl_t depctl = *depctl_reg;
-	dwc_deptsiz_t deptsiz = *deptsiz_reg;
-*/
     auto deptsiz = DEPTSIZ::Get(ep_num).ReadFrom(mmio);
 
 	/* Zero Length Packet? */
@@ -365,7 +347,7 @@ zxlogf(LINFO, "dwc_ep_config address %02x ep_num %d\n", ep_desc->bEndpointAddres
 }
 
 zx_status_t dwc_ep_disable(dwc_usb_t* dwc, uint8_t ep_addr) {
-    dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
     // convert address to index in range 0 - 31
     // low bit is IN/OUT
@@ -378,11 +360,7 @@ zx_status_t dwc_ep_disable(dwc_usb_t* dwc, uint8_t ep_addr) {
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
     mtx_lock(&ep->lock);
 
-    if (DWC_EP_IS_IN(ep_num)) {
-        regs->depin[ep_num].diepctl.usbactep = 0;
-    } else {
-        regs->depout[ep_num - 16].doepctl.usbactep = 0;
-    }
+    DEPCTL::Get(ep_num).ReadFrom(mmio).set_usbactep(0).WriteTo(mmio);
 
     ep->enabled = false;
     mtx_unlock(&ep->lock);
