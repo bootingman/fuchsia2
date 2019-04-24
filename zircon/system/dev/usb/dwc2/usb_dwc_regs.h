@@ -215,22 +215,6 @@ public:
     static auto Get(unsigned i) { return hwreg::RegisterAddr<DEPCTL>(0x900 + 0x20 * i); }
 };
 
-class DEPTSIZ : public hwreg::RegisterBase<DEPTSIZ, uint32_t, hwreg::EnablePrinter> {
-public:
-    DEF_FIELD(18, 0, xfersize);
-    DEF_FIELD(28, 19, pktcnt);
-    DEF_FIELD(30, 29, mc);
-    static auto Get(unsigned i) { return hwreg::RegisterAddr<DEPTSIZ>(0x910 + 0x20 * i); }
-};
-
-class DEPTSIZ0 : public hwreg::RegisterBase<DEPTSIZ0, uint32_t, hwreg::EnablePrinter> {
-public:
-    DEF_FIELD(6, 0, xfersize);
-    DEF_FIELD(20, 19, pktcnt);
-    DEF_FIELD(30, 29, supcnt);
-    static auto Get() { return hwreg::RegisterAddr<DEPTSIZ0>(0xB10); }
-};
-
 class DIEPINT : public hwreg::RegisterBase<DIEPINT, uint32_t, hwreg::EnablePrinter> {
 public:
     DEF_BIT(0, xfercompl);
@@ -243,36 +227,7 @@ public:
     DEF_BIT(8, txfifoundrn);
     DEF_BIT(9, bna);
     DEF_BIT(13, nak);
-};
-
-union dwc_diepint_t {
-	uint32_t val;
-	struct {
-		/* Transfer complete mask */
-		uint32_t xfercompl      : 1;
-		/* Endpoint disable mask */
-		uint32_t epdisabled     : 1;
-		/* AHB Error mask */
-		uint32_t ahberr         : 1;
-		/* TimeOUT Handshake mask (non-ISOC EPs) */
-		uint32_t timeout        : 1;
-		/* IN Token received with TxF Empty mask */
-		uint32_t intktxfemp     : 1;
-		/* IN Token Received with EP mismatch mask */
-		uint32_t intknepmis     : 1;
-		/* IN Endpoint NAK Effective mask */
-		uint32_t inepnakeff     : 1;
-		uint32_t reserved       : 1;
-		uint32_t txfifoundrn    : 1;
-		/* BNA Interrupt mask */
-		uint32_t bna            : 1;
-		uint32_t reserved2      : 3;
-		/* BNA Interrupt mask */
-		uint32_t nak:1;
-		uint32_t reserved3      : 18;
-	};
-    dwc_diepint_t(volatile dwc_diepint_t& r) { val = r.val; }
-    dwc_diepint_t() { val = 0; }
+    static auto Get(unsigned i) { return hwreg::RegisterAddr<DIEPINT>(0x908 + 0x20 * i); }
 };
 
 class DOEPINT : public hwreg::RegisterBase<DOEPINT, uint32_t, hwreg::EnablePrinter> {
@@ -291,45 +246,23 @@ public:
     DEF_BIT(13, nak);
     DEF_BIT(14, nyet);
     DEF_BIT(15, sr);
+    static auto Get(unsigned i) { return hwreg::RegisterAddr<DOEPINT>(0xB08 + 0x20 * i); }
 };
 
-union dwc_doepint_t {
-	uint32_t val;
-	struct {
-		/* Transfer complete */
-		uint32_t xfercompl      : 1;
-		/* Endpoint disable  */
-		uint32_t epdisabled     : 1;
-		/* AHB Error */
-		uint32_t ahberr         : 1;
-		/* Setup Phase Done (contorl EPs) */
-		uint32_t setup          : 1;
-		/* OUT Token Received when Endpoint Disabled */
-		uint32_t outtknepdis    : 1;
-		uint32_t stsphsercvd    : 1;
-		/* Back-to-Back SETUP Packets Received */
-		uint32_t back2backsetup : 1;
-		uint32_t reserved       : 1;
-		/* OUT packet Error */
-		uint32_t outpkterr      : 1;
-		/* BNA Interrupt */
-		uint32_t bna            : 1;
+class DEPTSIZ : public hwreg::RegisterBase<DEPTSIZ, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(18, 0, xfersize);
+    DEF_FIELD(28, 19, pktcnt);
+    DEF_FIELD(30, 29, mc);
+    static auto Get(unsigned i) { return hwreg::RegisterAddr<DEPTSIZ>(0x910 + 0x20 * i); }
+};
 
-		uint32_t reserved2      : 1;
-		/* Packet Drop Status */
-		uint32_t pktdrpsts      : 1;
-		/* Babble Interrupt */
-		uint32_t babble         : 1;
-		/* NAK Interrupt */
-		uint32_t nak            : 1;
-		/* NYET Interrupt */
-		uint32_t nyet           : 1;
-        /* Bit indicating setup packet received */
-        uint32_t sr             : 1;
-		uint32_t reserved3      : 16;
-	};
-    dwc_doepint_t(volatile dwc_doepint_t& r) { val = r.val; }
-    dwc_doepint_t() { val = 0; }
+class DEPTSIZ0 : public hwreg::RegisterBase<DEPTSIZ0, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(6, 0, xfersize);
+    DEF_FIELD(20, 19, pktcnt);
+    DEF_FIELD(30, 29, supcnt);
+    static auto Get() { return hwreg::RegisterAddr<DEPTSIZ0>(0xB10); }
 };
 
 class DCFG : public hwreg::RegisterBase<DCFG, uint32_t, hwreg::EnablePrinter> {
@@ -415,7 +348,7 @@ typedef struct {
 	uint32_t diepctl;
 	uint32_t reserved;
 	/* Device IN Endpoint Interrupt Register */
-	dwc_diepint_t diepint;
+	uint32_t diepint;
 	uint32_t reserved2;
 
 	/* Device IN Endpoint Transfer Size */
@@ -433,7 +366,7 @@ typedef struct {
 	uint32_t doepctl;
 	uint32_t reserved;
 	/* Device OUT Endpoint Interrupt Register */
-	dwc_doepint_t doepint;
+	uint32_t doepint;
 	uint32_t reserved2;
 
 	/* Device OUT Endpoint Transfer Size Register */

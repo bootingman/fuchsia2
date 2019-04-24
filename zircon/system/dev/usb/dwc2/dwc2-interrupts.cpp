@@ -6,20 +6,6 @@
 
 #include "dwc2.h"
 
-#define CLEAR_IN_EP_INTR(__epnum, __intr) \
-do { \
-        dwc_diepint_t diepint; \
-	diepint.__intr = 1; \
-	regs->depin[__epnum].diepint.val = diepint.val; \
-} while (0)
-
-#define CLEAR_OUT_EP_INTR(__epnum, __intr) \
-do { \
-        dwc_doepint_t doepint; \
-	doepint.__intr = 1; \
-	regs->depout[__epnum].doepint.val = doepint.val; \
-} while (0)
-
 static void dwc_ep_read_packet(dwc_regs_t* regs, void* buffer, uint32_t length, uint8_t ep_num) {
     uint32_t count = (length + 3) >> 2;
     uint32_t* dest = (uint32_t*)buffer;
@@ -200,7 +186,7 @@ static void pcd_setup(dwc_usb_t* dwc) {
         dwc->ep0_state = EP0_STATE_DATA_OUT;
         dwc_ep_start_transfer(dwc, DWC_EP0_OUT, setup->wLength);
     } else {
-        size_t actual;
+        size_t actual = 0;
         __UNUSED zx_status_t status = dwc_handle_setup(dwc, setup, dwc->ep0_buffer,
                                               sizeof(dwc->ep0_buffer), &actual);
         //zxlogf(INFO, "dwc_handle_setup returned %d actual %zu\n", status, actual);
@@ -448,6 +434,7 @@ break;
 
 static void dwc_handle_inepintr_irq(dwc_usb_t* dwc) {
     dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
 printf("dwc_handle_inepintr_irq\n");
 	for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
@@ -458,53 +445,52 @@ printf("dwc_handle_inepintr_irq\n");
         }
         regs->daint |= bit;
 
-		dwc_diepint_t diepint;
-		diepint.val = regs->depin[ep_num].diepint.val;
+        auto diepint = DIEPINT::Get(ep_num).ReadFrom(mmio);
 
 		/* Transfer complete */
-		if (diepint.xfercompl) {
+		if (diepint.xfercompl()) {
 if (ep_num > 0) zxlogf(LINFO, "dwc_handle_inepintr_irq xfercompl ep_num %u\n", ep_num);
-			CLEAR_IN_EP_INTR(ep_num, xfercompl);
+            DIEPINT::Get(ep_num).ReadFrom(mmio).set_xfercompl(1).WriteTo(mmio);
 //				regs->depin[ep_num].diepint.xfercompl = 1;
 			/* Complete the transfer */
 			if (0 == ep_num) {
 				dwc_handle_ep0(dwc);
 			} else {
 				dwc_complete_ep(dwc, ep_num);
-				if (diepint.nak) {
+				if (diepint.nak()) {
 printf("diepint.nak ep_num %u\n", ep_num);
-					CLEAR_IN_EP_INTR(ep_num, nak);
+                    DIEPINT::Get(ep_num).ReadFrom(mmio).set_nak(1).WriteTo(mmio);
 			    }
 			}
 		}
 		/* Endpoint disable  */
-		if (diepint.epdisabled) {
+		if (diepint.epdisabled()) {
 			/* Clear the bit in DIEPINTn for this interrupt */
-			CLEAR_IN_EP_INTR(ep_num, epdisabled);
+            DIEPINT::Get(ep_num).ReadFrom(mmio).set_epdisabled(1).WriteTo(mmio);
 		}
 		/* AHB Error */
-		if (diepint.ahberr) {
+		if (diepint.ahberr()) {
 			/* Clear the bit in DIEPINTn for this interrupt */
-			CLEAR_IN_EP_INTR(ep_num, ahberr);
+            DIEPINT::Get(ep_num).ReadFrom(mmio).set_ahberr(1).WriteTo(mmio);
 		}
 		/* TimeOUT Handshake (non-ISOC IN EPs) */
-		if (diepint.timeout) {
+		if (diepint.timeout()) {
 //				handle_in_ep_timeout_intr(ep_num);
 zxlogf(LINFO, "TODO handle_in_ep_timeout_intr\n");
-			CLEAR_IN_EP_INTR(ep_num, timeout);
+            DIEPINT::Get(ep_num).ReadFrom(mmio).set_timeout(1).WriteTo(mmio);
 		}
 		/** IN Token received with TxF Empty */
-		if (diepint.intktxfemp) {
-			CLEAR_IN_EP_INTR(ep_num, intktxfemp);
+		if (diepint.intktxfemp()) {
+            DIEPINT::Get(ep_num).ReadFrom(mmio).set_intktxfemp(1).WriteTo(mmio);
 		}
 		/** IN Token Received with EP mismatch */
-		if (diepint.intknepmis) {
-			CLEAR_IN_EP_INTR(ep_num, intknepmis);
+		if (diepint.intknepmis()) {
+            DIEPINT::Get(ep_num).ReadFrom(mmio).set_intknepmis(1).WriteTo(mmio);
 		}
 		/** IN Endpoint NAK Effective */
-		if (diepint.inepnakeff) {
+		if (diepint.inepnakeff()) {
 printf("diepint.inepnakeff ep_num %u\n", ep_num);
-			CLEAR_IN_EP_INTR(ep_num, inepnakeff);
+            DIEPINT::Get(ep_num).ReadFrom(mmio).set_inepnakeff(1).WriteTo(mmio);
 		}
 	}
 }
@@ -526,19 +512,19 @@ static void dwc_handle_outepintr_irq(dwc_usb_t* dwc) {
 
 	while (ep_intr) {
 		if (ep_intr & 1) {
-		    dwc_doepint_t doepint = regs->depout[ep_num].doepint;
-		    doepint.val &= DOEPMSK::Get().ReadFrom(mmio).reg_value();
-if (ep_num > 0) zxlogf(LINFO, "dwc_handle_outepintr_irq doepint.val %08x\n", doepint.val);
+		    auto doepint = DOEPINT::Get(ep_num).ReadFrom(mmio);
+		    doepint.set_reg_value(doepint.reg_value() & DOEPMSK::Get().ReadFrom(mmio).reg_value());
+if (ep_num > 0) zxlogf(LINFO, "dwc_handle_outepintr_irq doepint.val %08x\n", doepint.reg_value());
 
 			/* Transfer complete */
-			if (doepint.xfercompl) {
+			if (doepint.xfercompl()) {
 if (ep_num > 0) zxlogf(LINFO, "dwc_handle_outepintr_irq xfercompl\n");
 				/* Clear the bit in DOEPINTn for this interrupt */
-				CLEAR_OUT_EP_INTR(ep_num, xfercompl);
+                DOEPINT::Get(ep_num).ReadFrom(mmio).set_xfercompl(1).WriteTo(mmio);
 
 				if (ep_num == 0) {
-				    if (doepint.setup) { // astro
-    					CLEAR_OUT_EP_INTR(ep_num, setup);
+				    if (doepint.setup()) { // astro
+                        DOEPINT::Get(ep_num).ReadFrom(mmio).set_setup(1).WriteTo(mmio);
     			    }
 					dwc_handle_ep0(dwc);
 				} else {
@@ -546,22 +532,22 @@ if (ep_num > 0) zxlogf(LINFO, "dwc_handle_outepintr_irq xfercompl\n");
 				}
 			}
 			/* Endpoint disable  */
-			if (doepint.epdisabled) {
+			if (doepint.epdisabled()) {
 zxlogf(LINFO, "dwc_handle_outepintr_irq epdisabled\n");
 				/* Clear the bit in DOEPINTn for this interrupt */
-				CLEAR_OUT_EP_INTR(ep_num, epdisabled);
+                DOEPINT::Get(ep_num).ReadFrom(mmio).set_epdisabled(1).WriteTo(mmio);
 			}
 			/* AHB Error */
-			if (doepint.ahberr) {
+			if (doepint.ahberr()) {
 zxlogf(LINFO, "dwc_handle_outepintr_irq ahberr\n");
-				CLEAR_OUT_EP_INTR(ep_num, ahberr);
+                DOEPINT::Get(ep_num).ReadFrom(mmio).set_ahberr(1).WriteTo(mmio);
 			}
 			/* Setup Phase Done (contr0l EPs) */
-			if (doepint.setup) {
+			if (doepint.setup()) {
 			    if (1) { // astro
 					dwc_handle_ep0(dwc);
 				}
-				CLEAR_OUT_EP_INTR(ep_num, setup);
+                DOEPINT::Get(ep_num).ReadFrom(mmio).set_setup(1).WriteTo(mmio);
 			}
 		}
 		ep_num++;
