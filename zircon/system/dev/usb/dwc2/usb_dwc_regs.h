@@ -167,6 +167,13 @@ public:
     static auto Get() { return hwreg::RegisterAddr<GRXSTSP>(0x20); }
 };
 
+class GNPTXFSIZ : public hwreg::RegisterBase<GNPTXFSIZ, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_FIELD(15, 0, startaddr);
+    DEF_FIELD(31, 16, depth);
+    static auto Get() { return hwreg::RegisterAddr<GNPTXFSIZ>(0x28); }
+};
+
 class GNPTXSTS : public hwreg::RegisterBase<GNPTXSTS, uint32_t, hwreg::EnablePrinter> {
 public:
     DEF_FIELD(15, 0, nptxfspcavail);
@@ -497,13 +504,6 @@ typedef union {
 	};
 } dwc_pcgcctl_t;
 
-typedef union  {
-    uint32_t val;
-    struct {
-		uint32_t startaddr  : 16;
-		uint32_t depth      : 16;
-	};
-} dwc_fifosiz_t;
 
 typedef volatile struct {
     // OTG Control and Status Register
@@ -514,6 +514,7 @@ typedef volatile struct {
     uint32_t gahbcfg;
     // Core USB Configuration Register
     uint32_t gusbcfg;
+
     // Core Reset Register
     uint32_t grstctl;
     // Core Interrupt Register
@@ -522,14 +523,16 @@ typedef volatile struct {
     uint32_t gintmsk;
 	// Receive Status Queue Read Register
     uint32_t grxstsr;
+
 	// Receive Status Queue Read & POP Register
     dwc_grxstsp_t grxstsp;
 	// Receive FIFO Size Register
     uint32_t grxfsiz;
 	// Non Periodic Transmit FIFO Size Register
-    dwc_fifosiz_t gnptxfsiz;
+    uint32_t gnptxfsiz;
 	// Non Periodic Transmit FIFO/Queue Status Register
     uint32_t gnptxsts;
+
     // I2C Access Register
     uint32_t gi2cctl;
 	// PHY Vendor Control Register

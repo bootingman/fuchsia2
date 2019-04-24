@@ -54,8 +54,7 @@ printf("did regs->gahbcfg.dmaenable\n");
 
     regs->grxfsiz = 256;    //???
 
-	regs->gnptxfsiz.depth = 256;
-	regs->gnptxfsiz.startaddr = 256;
+    GNPTXFSIZ::Get().FromValue(0).set_depth(256).set_startaddr(256).WriteTo(mmio);
 
 	dwc_flush_fifo(dwc, 0x10);
 
