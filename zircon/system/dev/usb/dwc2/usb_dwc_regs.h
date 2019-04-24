@@ -162,6 +162,11 @@ public:
     DEF_FIELD(3, 0, epnum);
     DEF_FIELD(14, 4, bcnt);
     DEF_FIELD(16, 15, dpid);
+#define DWC_STS_DATA_UPDT		0x2	// OUT Data Packet
+#define DWC_STS_XFER_COMP		0x3	// OUT Data Transfer Complete
+#define DWC_DSTS_GOUT_NAK		0x1	// Global OUT NAK
+#define DWC_DSTS_SETUP_COMP		0x4	// Setup Phase Complete
+#define DWC_DSTS_SETUP_UPDT 0x6	// SETUP Packet
     DEF_FIELD(20, 17, pktsts);
     DEF_FIELD(24, 21, fn);
     static auto Get() { return hwreg::RegisterAddr<GRXSTSP>(0x20); }
@@ -182,24 +187,6 @@ public:
     DEF_FIELD(26, 25, nptxqtop_token);
     DEF_FIELD(30, 27, nptxqtop_chnep);
     static auto Get() { return hwreg::RegisterAddr<GNPTXSTS>(0x2C); }
-};
-
-union dwc_grxstsp_t {
-    uint32_t val;
-    struct {
-    	uint32_t epnum      : 4;
-    	uint32_t bcnt       : 11;
-    	uint32_t dpid       : 2;
-#define DWC_STS_DATA_UPDT		0x2	// OUT Data Packet
-#define DWC_STS_XFER_COMP		0x3	// OUT Data Transfer Complete
-#define DWC_DSTS_GOUT_NAK		0x1	// Global OUT NAK
-#define DWC_DSTS_SETUP_COMP		0x4	// Setup Phase Complete
-#define DWC_DSTS_SETUP_UPDT 0x6	// SETUP Packet
-    	uint32_t pktsts     : 4;
-    	uint32_t fn         : 4;
-    	uint32_t reserved   : 7;
-    };
-    dwc_grxstsp_t(volatile dwc_grxstsp_t& r) { val = r.val; }
 };
 
 class DEPCTL : public hwreg::RegisterBase<DEPCTL, uint32_t, hwreg::EnablePrinter> {
@@ -525,7 +512,7 @@ typedef volatile struct {
     uint32_t grxstsr;
 
 	// Receive Status Queue Read & POP Register
-    dwc_grxstsp_t grxstsp;
+    uint32_t grxstsp;
 	// Receive FIFO Size Register
     uint32_t grxfsiz;
 	// Non Periodic Transmit FIFO Size Register

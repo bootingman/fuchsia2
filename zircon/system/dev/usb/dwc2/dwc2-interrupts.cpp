@@ -405,29 +405,30 @@ static void dwc_handle_enumdone_irq(dwc_usb_t* dwc) {
 
 static void dwc_handle_rxstsqlvl_irq(dwc_usb_t* dwc) {
     dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
 //why?	regs->gintmsk.rxstsqlvl = 0;
 
 	/* Get the Status from the top of the FIFO */
-	 dwc_grxstsp_t grxstsp = regs->grxstsp;
-zxlogf(LINFO, "dwc_handle_rxstsqlvl_irq epnum: %u bcnt: %u pktsts: %u\n", grxstsp.epnum, grxstsp.bcnt, grxstsp.pktsts);
+	auto grxstsp = GRXSTSP::Get().ReadFrom(mmio);
+zxlogf(LINFO, "dwc_handle_rxstsqlvl_irq epnum: %u bcnt: %u pktsts: %u\n", grxstsp.epnum(), grxstsp.bcnt(), grxstsp.pktsts());
 
-    uint8_t ep_num = grxstsp.epnum;
+    auto ep_num = grxstsp.epnum();
     if (ep_num > 0) {
-        ep_num = static_cast<uint8_t>(ep_num + 16);
+        ep_num += 16;
     }
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
 
-	switch (grxstsp.pktsts) {
+	switch (grxstsp.pktsts()) {
 	case DWC_STS_DATA_UPDT: {
-	    uint32_t fifo_count = grxstsp.bcnt;
-zxlogf(LINFO, "DWC_STS_DATA_UPDT grxstsp.bcnt: %u\n", grxstsp.bcnt);
+	    uint32_t fifo_count = grxstsp.bcnt();
+zxlogf(LINFO, "DWC_STS_DATA_UPDT grxstsp.bcnt: %u\n", grxstsp.bcnt());
         if (fifo_count > ep->req_length - ep->req_offset) {
 zxlogf(LINFO, "fifo_count %u > %u\n", fifo_count, ep->req_length - ep->req_offset);
             fifo_count = ep->req_length - ep->req_offset;
         }
 		if (fifo_count > 0) {
-			dwc_ep_read_packet(regs, ep->req_buffer + ep->req_offset, fifo_count, ep_num);
+			dwc_ep_read_packet(regs, ep->req_buffer + ep->req_offset, fifo_count, static_cast<uint8_t>(ep_num));
 			ep->req_offset += fifo_count;
 		}
 		break;
