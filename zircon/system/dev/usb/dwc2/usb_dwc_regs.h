@@ -386,24 +386,8 @@ public:
     DEF_BIT(23, descdma);
     DEF_FIELD(25, 24, perschintvl);
     DEF_FIELD(31, 26, resvalid);
+    static auto Get() { return hwreg::RegisterAddr<DCFG>(0x800); }
 };
-
-typedef union {
-    uint32_t val;
-    struct {
-        uint32_t devspd         : 2;
-        uint32_t nzstsouthshk   : 1;
-        uint32_t ena32khzs      : 1;
-        uint32_t devaddr        : 7;
-        uint32_t perfrint       : 2;
-        uint32_t endevoutnak    : 1;
-        uint32_t reserved       : 4;
-        uint32_t epmscnt        : 5;
-        uint32_t descdma        : 1;
-        uint32_t perschintvl    : 2;
-        uint32_t resvalid       : 6;
-    };
-} dwc_dcfg_t;
 
 class DCTL : public hwreg::RegisterBase<DCTL, uint32_t, hwreg::EnablePrinter> {
 public:
@@ -431,7 +415,7 @@ public:
     DEF_FIELD(2, 1, enumspd);
     DEF_BIT(3, errticerr);
     DEF_FIELD(21, 8, soffn);
-    static auto Get() { return hwreg::RegisterAddr<DCTL>(0x808); }
+    static auto Get() { return hwreg::RegisterAddr<DSTS>(0x808); }
 };
 
 typedef struct {
@@ -590,7 +574,7 @@ typedef volatile struct {
     uint32_t reserved_030[(0x800 - 0x054) / sizeof(uint32_t)];
 
     // Device Configuration Register
-    dwc_dcfg_t dcfg;
+    uint32_t dcfg;
     // Device Control Register
     uint32_t dctl;
     // Device Status Register

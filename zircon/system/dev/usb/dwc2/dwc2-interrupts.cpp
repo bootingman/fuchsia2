@@ -32,9 +32,10 @@ zxlogf(LSPEW, "read %08x\n", dest[-1]);
 }
 
 static void dwc_set_address(dwc_usb_t* dwc, uint8_t address) {
-    dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
+
 zxlogf(LINFO, "dwc_set_address %u\n", address);
-    regs->dcfg.devaddr = address & 0x7f;
+    DCFG::Get().ReadFrom(mmio).set_devaddr(address).WriteTo(mmio);
 }
 
 static void dwc2_ep0_out_start(dwc_usb_t* dwc)  {
@@ -339,7 +340,7 @@ static void dwc_handle_reset_irq(dwc_usb_t* dwc) {
 	regs->diepmsk.val = diepmsk.val;
 
 	/* Reset Device Address */
-	regs->dcfg.devaddr = 0;
+    DCFG::Get().ReadFrom(mmio).set_devaddr(0).WriteTo(mmio);
 
 	/* setup EP0 to receive SETUP packets */
 	dwc2_ep0_out_start(dwc);
