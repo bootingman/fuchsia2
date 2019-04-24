@@ -83,7 +83,7 @@ public:
     static auto Get() { return hwreg::RegisterAddr<GRSTCTL>(0x10); }
 };
 
-class GINITSTS : public hwreg::RegisterBase<GINITSTS, uint32_t, hwreg::EnablePrinter> {
+class GINTSTS : public hwreg::RegisterBase<GINTSTS, uint32_t, hwreg::EnablePrinter> {
 public:
     DEF_BIT(0, curmode);
     DEF_BIT(1, modemismatch);
@@ -117,10 +117,10 @@ public:
     DEF_BIT(29, disconnect);
     DEF_BIT(30, sessreqintr);
     DEF_BIT(31, wkupintr);
-    static auto Get() { return hwreg::RegisterAddr<GINITSTS>(0x14); }
+    static auto Get() { return hwreg::RegisterAddr<GINTSTS>(0x14); }
 };
 
-class GINITMSK : public hwreg::RegisterBase<GINITMSK, uint32_t, hwreg::EnablePrinter> {
+class GINTMSK : public hwreg::RegisterBase<GINTMSK, uint32_t, hwreg::EnablePrinter> {
 public:
     DEF_BIT(0, curmode);
     DEF_BIT(1, modemismatch);
@@ -154,47 +154,7 @@ public:
     DEF_BIT(29, disconnect);
     DEF_BIT(30, sessreqintr);
     DEF_BIT(31, wkupintr);
-    static auto Get() { return hwreg::RegisterAddr<GINITMSK>(0x18); }
-};
-
-union dwc_interrupts_t {
-        uint32_t val;
-    struct {
-        uint32_t curmode           : 1;
-        uint32_t modemismatch      : 1;
-        uint32_t otgintr           : 1;
-        uint32_t sof_intr          : 1;
-        uint32_t rxstsqlvl         : 1;
-        uint32_t nptxfempty        : 1;
-        uint32_t ginnakeff         : 1;
-        uint32_t goutnakeff        : 1;
-        uint32_t ulpickint         : 1;
-        uint32_t i2cintr           : 1;
-        uint32_t erlysuspend       : 1;
-        uint32_t usbsuspend        : 1;
-        uint32_t usbreset          : 1;
-        uint32_t enumdone          : 1;
-        uint32_t isooutdrop        : 1;
-        uint32_t eopframe          : 1;
-        uint32_t restoredone       : 1;
-        uint32_t epmismatch        : 1;
-        uint32_t inepintr          : 1;
-        uint32_t outepintr         : 1;
-        uint32_t incomplisoin      : 1;
-        uint32_t incomplisoout     : 1;
-        uint32_t fetsusp           : 1;
-        uint32_t resetdet          : 1;
-        uint32_t port_intr         : 1;
-        uint32_t host_channel_intr : 1;
-        uint32_t ptxfempty         : 1;
-        uint32_t lpmtranrcvd       : 1;
-        uint32_t conidstschng      : 1;
-        uint32_t disconnect        : 1;
-        uint32_t sessreqintr       : 1;
-        uint32_t wkupintr          : 1;
-    };
-    dwc_interrupts_t(volatile dwc_interrupts_t& r) { val = r.val; }
-    dwc_interrupts_t() { val = 0; }
+    static auto Get() { return hwreg::RegisterAddr<GINTMSK>(0x18); }
 };
 
 class GRXSTSP : public hwreg::RegisterBase<GRXSTSP, uint32_t, hwreg::EnablePrinter> {
@@ -649,9 +609,9 @@ typedef volatile struct {
     // Core Reset Register
     uint32_t grstctl;
     // Core Interrupt Register
-    dwc_interrupts_t gintsts;
+    uint32_t gintsts;
     // Core Interrupt Mask Register
-    dwc_interrupts_t gintmsk;
+    uint32_t gintmsk;
 	// Receive Status Queue Read Register
     uint32_t grxstsr;
 	// Receive Status Queue Read & POP Register

@@ -43,7 +43,7 @@ zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_
     if (ep->req_offset < ep->req_length) {
         // enable txempty
 	    zxlogf(LINFO, "turn on nptxfempty\n");
-		regs->gintmsk.nptxfempty = 1;
+	    GINTMSK::Get().ReadFrom(dwc->mmio()).set_nptxfempty(1).WriteTo(dwc->mmio());
 		return true;
     } else {
         return false;

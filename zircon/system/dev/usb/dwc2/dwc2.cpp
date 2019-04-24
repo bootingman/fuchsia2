@@ -72,38 +72,38 @@ printf("did regs->gahbcfg.dmaenable\n");
         regs->depout[i].doeptsiz.val = 0;
     }
 
-    dwc_interrupts_t gintmsk;
+    auto gintmsk = GINTMSK::Get().FromValue(0);
 
-    gintmsk.rxstsqlvl = 1;
-    gintmsk.usbreset = 1;
-    gintmsk.enumdone = 1;
-    gintmsk.inepintr = 1;
-    gintmsk.outepintr = 1;
-//    gintmsk.sof_intr = 1;
-    gintmsk.usbsuspend = 1;
+    gintmsk.set_rxstsqlvl(1);
+    gintmsk.set_usbreset(1);
+    gintmsk.set_enumdone(1);
+    gintmsk.set_inepintr(1);
+    gintmsk.set_outepintr(1);
+//    gintmsk.set_sof_intr(1);
+    gintmsk.set_usbsuspend(1);
 
 
-    gintmsk.ginnakeff = 1;
-    gintmsk.goutnakeff = 1;
+    gintmsk.set_ginnakeff(1);
+    gintmsk.set_goutnakeff(1);
 
 
 /*
-	gintmsk.modemismatch = 1;
-	gintmsk.otgintr = 1;
-	gintmsk.conidstschng = 1;
-	gintmsk.wkupintr = 1;
-	gintmsk.disconnect = 0;
-	gintmsk.sessreqintr = 1;
+	gintmsk.set_modemismatch(1);
+	gintmsk.set_otgintr(1);
+	gintmsk.set_conidstschng(1);
+	gintmsk.set_wkupintr(1);
+	gintmsk.set_disconnect(0);
+	gintmsk.set_sessreqintr(1);
 */
 
 printf("ghwcfg1 %08x ghwcfg2 %08x ghwcfg3 %08x\n", regs->ghwcfg1, regs->ghwcfg2, regs->ghwcfg3);
 
 	regs->gotgint = 0xFFFFFFF;
-	regs->gintsts.val = 0xFFFFFFF;
+    GINTSTS::Get().FromValue(0xFFFFFFF).WriteTo(dwc->mmio());
 
-zxlogf(LINFO, "enabling interrupts %08x\n", gintmsk.val);
+zxlogf(LINFO, "enabling interrupts %08x\n", gintmsk.reg_value());
 
-    regs->gintmsk.val = gintmsk.val;
+    gintmsk.WriteTo(dwc->mmio());
 
     GAHBCFG::Get().ReadFrom(dwc->mmio()).set_glblintrmsk(1).WriteTo(dwc->mmio());
 

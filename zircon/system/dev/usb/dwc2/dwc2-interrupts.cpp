@@ -591,7 +591,7 @@ static void dwc_handle_nptxfempty_irq(dwc_usb_t* dwc) {
 	}
 	if (!need_more) {
 	    zxlogf(LINFO, "turn off nptxfempty\n");
-		regs->gintmsk.nptxfempty = 0;
+	    GINTMSK::Get().ReadFrom(dwc->mmio()).set_nptxfempty(0).WriteTo(dwc->mmio());
 	}
 }
 
@@ -603,7 +603,7 @@ static void dwc_handle_usbsuspend_irq(dwc_usb_t* dwc) {
 // Thread to handle interrupts.
 static int dwc_irq_thread(void* arg) {
     dwc_usb_t* dwc = (dwc_usb_t*)arg;
-    dwc_regs_t* regs = dwc->regs;
+    auto* mmio = dwc->mmio();
 
     while (1) {
         zx_status_t wait_res = zx_interrupt_wait(dwc->irq_handle, NULL);
@@ -613,70 +613,70 @@ static int dwc_irq_thread(void* arg) {
 
         //?? is while loop necessary?
         while (1) {
-            dwc_interrupts_t interrupts = regs->gintsts;
-            dwc_interrupts_t mask = regs->gintmsk;
-            interrupts.val &= mask.val;
+            auto gintsts = GINTSTS::Get().ReadFrom(mmio);
+            auto gintmsk = GINTMSK::Get().ReadFrom(mmio);
+            gintsts.set_reg_value(gintsts.reg_value() & gintmsk.reg_value());
 
-            if (!interrupts.val) {
+            if (gintsts.reg_value() == 0) {
                 break;
             }
 
             // acknowledge
-            regs->gintsts.val = interrupts.val;
+            gintsts.WriteTo(mmio);
 
             zxlogf(LINFO, "dwc_handle_irq:");
-            if (interrupts.modemismatch) zxlogf(LINFO, " modemismatch");
-            if (interrupts.otgintr) zxlogf(LINFO, " otgintr");
-            if (interrupts.sof_intr) zxlogf(LINFO, " sof_intr");
-            if (interrupts.rxstsqlvl) zxlogf(LINFO, " rxstsqlvl");
-            if (interrupts.nptxfempty) zxlogf(LINFO, " nptxfempty");
-            if (interrupts.ginnakeff) zxlogf(LINFO, " ginnakeff");
-            if (interrupts.goutnakeff) zxlogf(LINFO, " goutnakeff");
-            if (interrupts.ulpickint) zxlogf(LINFO, " ulpickint");
-            if (interrupts.i2cintr) zxlogf(LINFO, " i2cintr");
-            if (interrupts.erlysuspend) zxlogf(LINFO, " erlysuspend");
-            if (interrupts.usbsuspend) zxlogf(LINFO, " usbsuspend");
-            if (interrupts.usbreset) zxlogf(LINFO, " usbreset");
-            if (interrupts.enumdone) zxlogf(LINFO, " enumdone");
-            if (interrupts.isooutdrop) zxlogf(LINFO, " isooutdrop");
-            if (interrupts.eopframe) zxlogf(LINFO, " eopframe");
-            if (interrupts.restoredone) zxlogf(LINFO, " restoredone");
-            if (interrupts.epmismatch) zxlogf(LINFO, " epmismatch");
-            if (interrupts.inepintr) zxlogf(LINFO, " inepintr");
-            if (interrupts.outepintr) zxlogf(LINFO, " outepintr");
-            if (interrupts.incomplisoin) zxlogf(LINFO, " incomplisoin");
-            if (interrupts.incomplisoout) zxlogf(LINFO, " incomplisoout");
-            if (interrupts.fetsusp) zxlogf(LINFO, " fetsusp");
-            if (interrupts.resetdet) zxlogf(LINFO, " resetdet");
-            if (interrupts.port_intr) zxlogf(LINFO, " port_intr");
-            if (interrupts.host_channel_intr) zxlogf(LINFO, " host_channel_intr");
-            if (interrupts.ptxfempty) zxlogf(LINFO, " ptxfempty");
-            if (interrupts.lpmtranrcvd) zxlogf(LINFO, " lpmtranrcvd");
-            if (interrupts.conidstschng) zxlogf(LINFO, " conidstschng");
-            if (interrupts.disconnect) zxlogf(LINFO, " disconnect");
-            if (interrupts.sessreqintr) zxlogf(LINFO, " sessreqintr");
-            if (interrupts.wkupintr) zxlogf(LINFO, " wkupintr");
+            if (gintsts.modemismatch()) zxlogf(LINFO, " modemismatch");
+            if (gintsts.otgintr()) zxlogf(LINFO, " otgintr");
+            if (gintsts.sof_intr()) zxlogf(LINFO, " sof_intr");
+            if (gintsts.rxstsqlvl()) zxlogf(LINFO, " rxstsqlvl");
+            if (gintsts.nptxfempty()) zxlogf(LINFO, " nptxfempty");
+            if (gintsts.ginnakeff()) zxlogf(LINFO, " ginnakeff");
+            if (gintsts.goutnakeff()) zxlogf(LINFO, " goutnakeff");
+            if (gintsts.ulpickint()) zxlogf(LINFO, " ulpickint");
+            if (gintsts.i2cintr()) zxlogf(LINFO, " i2cintr");
+            if (gintsts.erlysuspend()) zxlogf(LINFO, " erlysuspend");
+            if (gintsts.usbsuspend()) zxlogf(LINFO, " usbsuspend");
+            if (gintsts.usbreset()) zxlogf(LINFO, " usbreset");
+            if (gintsts.enumdone()) zxlogf(LINFO, " enumdone");
+            if (gintsts.isooutdrop()) zxlogf(LINFO, " isooutdrop");
+            if (gintsts.eopframe()) zxlogf(LINFO, " eopframe");
+            if (gintsts.restoredone()) zxlogf(LINFO, " restoredone");
+            if (gintsts.epmismatch()) zxlogf(LINFO, " epmismatch");
+            if (gintsts.inepintr()) zxlogf(LINFO, " inepintr");
+            if (gintsts.outepintr()) zxlogf(LINFO, " outepintr");
+            if (gintsts.incomplisoin()) zxlogf(LINFO, " incomplisoin");
+            if (gintsts.incomplisoout()) zxlogf(LINFO, " incomplisoout");
+            if (gintsts.fetsusp()) zxlogf(LINFO, " fetsusp");
+            if (gintsts.resetdet()) zxlogf(LINFO, " resetdet");
+            if (gintsts.port_intr()) zxlogf(LINFO, " port_intr");
+            if (gintsts.host_channel_intr()) zxlogf(LINFO, " host_channel_intr");
+            if (gintsts.ptxfempty()) zxlogf(LINFO, " ptxfempty");
+            if (gintsts.lpmtranrcvd()) zxlogf(LINFO, " lpmtranrcvd");
+            if (gintsts.conidstschng()) zxlogf(LINFO, " conidstschng");
+            if (gintsts.disconnect()) zxlogf(LINFO, " disconnect");
+            if (gintsts.sessreqintr()) zxlogf(LINFO, " sessreqintr");
+            if (gintsts.wkupintr()) zxlogf(LINFO, " wkupintr");
             zxlogf(LINFO, "\n");
 
-            if (interrupts.usbreset) {
+            if (gintsts.usbreset()) {
                 dwc_handle_reset_irq(dwc);
             }
-            if (interrupts.usbsuspend) {
+            if (gintsts.usbsuspend()) {
                 dwc_handle_usbsuspend_irq(dwc);
             }
-            if (interrupts.enumdone) {
+            if (gintsts.enumdone()) {
                 dwc_handle_enumdone_irq(dwc);
             }
-            if (interrupts.rxstsqlvl) {
+            if (gintsts.rxstsqlvl()) {
                 dwc_handle_rxstsqlvl_irq(dwc);
             }
-            if (interrupts.inepintr) {
+            if (gintsts.inepintr()) {
                 dwc_handle_inepintr_irq(dwc);
             }
-            if (interrupts.outepintr) {
+            if (gintsts.outepintr()) {
                 dwc_handle_outepintr_irq(dwc);
             }
-            if (interrupts.nptxfempty) {
+            if (gintsts.nptxfempty()) {
                 dwc_handle_nptxfempty_irq(dwc);
             }
         }
