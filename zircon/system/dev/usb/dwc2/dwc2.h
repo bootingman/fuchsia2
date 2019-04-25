@@ -22,6 +22,7 @@
 #include <ddktl/protocol/platform/device.h>
 #include <ddktl/protocol/usb/dci.h>
 #include <ddktl/protocol/usb.h>
+#include <fbl/mutex.h>
 #include <lib/mmio/mmio.h>
 #include <usb/request-cpp.h>
 
@@ -58,7 +59,7 @@ typedef struct {
     ((dwc_usb_req_internal_t*)((uintptr_t)(req) + sizeof(usb_request_t)))
 #define INTERNAL_TO_USB_REQ(ctx) ((usb_request_t *)((uintptr_t)(ctx) - sizeof(usb_request_t)))
 
-typedef struct {
+struct dwc_endpoint_t {
     list_node_t queued_reqs;    // requests waiting to be processed
     usb_request_t* current_req; // request currently being processed
     uint8_t* req_buffer;
@@ -69,7 +70,7 @@ typedef struct {
     // and ep specific hardware registers
     // This should be acquired before dwc_usb_t.lock
     // if acquiring both locks.
-    mtx_t lock;
+    fbl::Mutex lock;
 
     uint16_t max_packet_size;
     uint8_t ep_num;
@@ -78,7 +79,7 @@ typedef struct {
     uint8_t interval;
     bool send_zlp;
     bool stalled;
-} dwc_endpoint_t;
+};
 
 typedef struct {
     zx_device_t* zxdev;
@@ -97,7 +98,6 @@ typedef struct {
     inline ddk::MmioBuffer* mmio() {
         return &*mmio_;
     }
-
 
     // device stuff
     dwc_endpoint_t eps[DWC_MAX_EPS];
@@ -173,15 +173,53 @@ public:
      size_t UsbDciGetRequestSize();
      zx_status_t UsbDciCancelAll(uint8_t ep_address);
 
+
+    void FlushFifo(uint32_t fifo_num);
+    zx_status_t InitController();
+    zx_status_t Start();
+    void StartEp0();
+    bool WritePacket(uint8_t ep_num);
+
+    void HandleReset();
+    void HandleSuspend();
+    void HandleEnumDone();
+    void HandleRxStatusQueueLevel();
+    void HandleInEpInterrupt();
+    void HandleOutEpInterrupt();
+    void HandleTxFifoEmpty();
+
 private:
     DISALLOW_COPY_ASSIGN_AND_MOVE(Dwc2);
 
     using Request = usb::UnownedRequest<void>;
     using RequestQueue = usb::UnownedRequestQueue<void>;
 
-    inline ddk::MmioBuffer* mmio() {
+    inline ddk::MmioBuffer* get_mmio() {
         return &*mmio_;
     }
+
+    dwc_endpoint_t eps[DWC_MAX_EPS];
+
+#if SINGLE_EP_IN_QUEUE
+    list_node_t queued_in_reqs;
+    usb_request_t* current_in_req;
+#endif
+
+    // Used for synchronizing global state
+    // and non ep specific hardware registers.
+    // dwc_endpoint_t.lock should be acquired first
+    // if acquiring both locks.
+    fbl::Mutex lock_;
+
+    bool configured;
+
+    usb_setup_t cur_setup;    
+    dwc_ep0_state_t ep0_state;
+    uint8_t ep0_buffer[UINT16_MAX];
+    bool got_setup;
+
+
+
 
     ddk::PDev pdev_;
     std::optional<ddk::UsbDciInterfaceProtocolClient> dci_intf_;

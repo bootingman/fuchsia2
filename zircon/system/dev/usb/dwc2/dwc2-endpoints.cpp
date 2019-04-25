@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <fbl/auto_lock.h>
 #include <usb/usb-request.h>
 
 #include "dwc2.h"
@@ -183,7 +184,8 @@ printf("dwc_ep_queue_next_locked current_req %p req_int %p\n", ep->current_req, 
 
 static void dwc_ep_end_transfers(dwc_usb_t* dwc, unsigned ep_num, zx_status_t reason) {
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
-    mtx_lock(&ep->lock);
+
+    fbl::AutoLock lock(&ep->lock);
 
     if (ep->current_req) {
 //        dwc_cmd_ep_end_transfer(dwc, ep_num);
@@ -198,14 +200,12 @@ static void dwc_ep_end_transfers(dwc_usb_t* dwc, unsigned ep_num, zx_status_t re
         usb_request_t* req = INTERNAL_TO_USB_REQ(req_int);
         usb_request_complete(req, reason, 0, &req_int->complete_cb);
     }
-
-    mtx_unlock(&ep->lock);
 }
 
 static void dwc_enable_ep(dwc_usb_t* dwc, unsigned ep_num, bool enable) {
     auto* mmio = dwc->mmio();
 
-    mtx_lock(&dwc->lock);
+    fbl::AutoLock lock(&dwc->lock);
 
     uint32_t bit = 1 << ep_num;
 
@@ -219,8 +219,6 @@ static void dwc_enable_ep(dwc_usb_t* dwc, unsigned ep_num, bool enable) {
         mask |= bit;
     }
     DAINTMSK::Get().FromValue(mask).WriteTo(mmio);
-
-    mtx_unlock(&dwc->lock);
 }
 
 static void dwc_ep_set_config(dwc_usb_t* dwc, unsigned ep_num, bool enable) {
@@ -260,9 +258,8 @@ void dwc_start_eps(dwc_usb_t* dwc) {
         if (ep->enabled) {
             dwc_ep_set_config(dwc, ep_num, true);
 
-            mtx_lock(&ep->lock);
+            fbl::AutoLock lock(&ep->lock);
             dwc_ep_queue_next_locked(dwc, ep);
-            mtx_unlock(&ep->lock);
         }
     }
 }
@@ -280,10 +277,9 @@ void dwc_ep_queue(dwc_usb_t* dwc, uint8_t ep_num, usb_request_t* req) {
         }
     }
 
-    mtx_lock(&ep->lock);
+    fbl::AutoLock lock(&ep->lock);
 
     if (!ep->enabled) {
-        mtx_unlock(&ep->lock);
         zxlogf(ERROR, "dwc_ep_queue ep not enabled!\n");    
         dwc_usb_req_internal_t* req_int = USB_REQ_TO_INTERNAL(req);
         usb_request_complete(req, ZX_ERR_BAD_STATE, 0, &req_int->complete_cb);
@@ -298,8 +294,6 @@ void dwc_ep_queue(dwc_usb_t* dwc, uint8_t ep_num, usb_request_t* req) {
     } else {
             zxlogf(ERROR, "dwc_ep_queue not configured!\n");    
     }
-
-    mtx_unlock(&ep->lock);
 }
 
 zx_status_t dwc_ep_config(dwc_usb_t* dwc, const usb_endpoint_descriptor_t* ep_desc,
@@ -322,7 +316,7 @@ zxlogf(LINFO, "dwc_ep_config address %02x ep_num %d\n", ep_desc->bEndpointAddres
 
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
 
-    mtx_lock(&ep->lock);
+    fbl::AutoLock lock(&ep->lock);
 
     ep->max_packet_size = usb_ep_max_packet(ep_desc);
     ep->type = ep_type;
@@ -347,8 +341,6 @@ zxlogf(LINFO, "dwc_ep_config address %02x ep_num %d\n", ep_desc->bEndpointAddres
         dwc_ep_queue_next_locked(dwc, ep);
     }
 
-    mtx_unlock(&ep->lock);
-
     return ZX_OK;
 }
 
@@ -364,12 +356,11 @@ zx_status_t dwc_ep_disable(dwc_usb_t* dwc, uint8_t ep_addr) {
     }
 
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
-    mtx_lock(&ep->lock);
+
+    fbl::AutoLock lock(&ep->lock);
 
     DEPCTL::Get(ep_num).ReadFrom(mmio).set_usbactep(0).WriteTo(mmio);
-
     ep->enabled = false;
-    mtx_unlock(&ep->lock);
 
     return ZX_OK;
 }
@@ -380,10 +371,9 @@ zx_status_t dwc_ep_set_stall(dwc_usb_t* dwc, uint8_t ep_num, bool stall) {
     }
 
     dwc_endpoint_t* ep = &dwc->eps[ep_num];
-    mtx_lock(&ep->lock);
+    fbl::AutoLock lock(&ep->lock);
 
     if (!ep->enabled) {
-        mtx_unlock(&ep->lock);
         return ZX_ERR_BAD_STATE;
     }
 /*
@@ -394,7 +384,6 @@ zx_status_t dwc_ep_set_stall(dwc_usb_t* dwc, uint8_t ep_num, bool stall) {
     }
 */
     ep->stalled = stall;
-    mtx_unlock(&ep->lock);
 
     return ZX_OK;
 }
