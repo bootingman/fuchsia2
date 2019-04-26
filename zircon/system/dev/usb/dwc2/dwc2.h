@@ -150,7 +150,7 @@ private:
         return &*mmio_;
     }
 
-    dwc_endpoint_t eps[DWC_MAX_EPS];
+    dwc_endpoint_t endpoints_[DWC_MAX_EPS];
 
 #if SINGLE_EP_IN_QUEUE
     list_node_t queued_in_reqs;
@@ -163,11 +163,11 @@ private:
     // if acquiring both locks.
     fbl::Mutex lock_;
 
-    bool configured;
+    bool configured_;
 
-    usb_setup_t cur_setup;    
-    dwc_ep0_state_t ep0_state;
-    uint8_t ep0_buffer[UINT16_MAX];
+    usb_setup_t cur_setup_;    
+    dwc_ep0_state_t ep0_state_;
+    uint8_t ep0_buffer_[UINT16_MAX];
     bool got_setup;
 
 

@@ -9,6 +9,7 @@
 #include <ddk/protocol/platform-device-lib.h>
 #include <ddktl/pdev.h>
 #include <ddktl/protocol/platform/device.h>
+#include <fbl/algorithm.h>
 #include <usb/usb-request.h>
 
 namespace dwc2 {
@@ -18,7 +19,7 @@ void Dwc2::HandleReset() {
 
     zxlogf(LINFO, "\nRESET\n");
 
-    ep0_state = EP0_STATE_DISCONNECTED;
+    ep0_state_ = EP0_STATE_DISCONNECTED;
 
     DCTL::Get().ReadFrom(mmio).set_rmtwkupsig(1).WriteTo(mmio);
 
@@ -70,9 +71,9 @@ void Dwc2::HandleEnumDone() {
         astro_usb_do_usb_tuning(&dwc->astro_usb, false, false);
     }
 */
-    ep0_state = EP0_STATE_IDLE;
+    ep0_state_ = EP0_STATE_IDLE;
 
-    eps[0].max_packet_size = 64;
+    endpoints_[0].max_packet_size = 64;
 
     DEPCTL::Get(0).ReadFrom(mmio).set_mps(DWC_DEP0CTL_MPS_64).WriteTo(mmio);
     DEPCTL::Get(16).ReadFrom(mmio).set_epena(1).WriteTo(mmio);
@@ -126,7 +127,7 @@ zxlogf(LINFO, "dwc_handle_rxstsqlvl_irq epnum: %u bcnt: %u pktsts: %u\n", grxsts
     if (ep_num > 0) {
         ep_num += 16;
     }
-    dwc_endpoint_t* ep = &eps[ep_num];
+    auto* ep = &endpoints_[ep_num];
 
     switch (grxstsp.pktsts()) {
     case DWC_STS_DATA_UPDT: {
@@ -146,12 +147,12 @@ zxlogf(LINFO, "fifo_count %u > %u\n", fifo_count, ep->req_length - ep->req_offse
     case DWC_DSTS_SETUP_UPDT: {
 //zxlogf(LINFO, "DWC_DSTS_SETUP_UPDT\n"); 
     volatile uint32_t* fifo = (uint32_t *)((uint8_t *)regs + 0x1000);
-    uint32_t* dest = (uint32_t*)&cur_setup;
+    uint32_t* dest = (uint32_t*)&cur_setup_;
     dest[0] = *fifo;
     dest[1] = *fifo;
 zxlogf(LINFO, "SETUP bmRequestType: 0x%02x bRequest: %u wValue: %u wIndex: %u wLength: %u\n",
-        cur_setup.bmRequestType, cur_setup.bRequest, cur_setup.wValue, cur_setup.wIndex,
-        cur_setup.wLength);
+        cur_setup_.bmRequestType, cur_setup_.bRequest, cur_setup_.wValue, cur_setup_.wIndex,
+        cur_setup_.wLength);
        got_setup = true;
         break;
     }
@@ -310,7 +311,7 @@ void Dwc2::HandleTxFifoEmpty() {
 
 zx_status_t Dwc2::HandleSetup(usb_setup_t* setup, void* buffer, size_t length, size_t* out_actual) {
     zx_status_t status;
-    dwc_endpoint_t* ep = &eps[0];
+    auto* ep = &endpoints_[0];
 
     if (setup->bmRequestType == (USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_DEVICE)) {
         // handle some special setup requests in this driver
@@ -323,12 +324,12 @@ zx_status_t Dwc2::HandleSetup(usb_setup_t* setup, void* buffer, size_t length, s
         case USB_REQ_SET_CONFIGURATION:
             zxlogf(INFO, "SET_CONFIGURATION %d\n", setup->wValue);
             StopEndpoints();
-                configured = true;
+                configured_ = true;
             status = dci_intf_->Control(setup, nullptr, 0, buffer, length, out_actual);
             if (status == ZX_OK && setup->wValue) {
                 StartEndpoints();
             } else {
-                configured = false;
+                configured_ = false;
             }
             return status;
         default:
@@ -339,12 +340,12 @@ zx_status_t Dwc2::HandleSetup(usb_setup_t* setup, void* buffer, size_t length, s
                setup->bRequest == USB_REQ_SET_INTERFACE) {
         zxlogf(INFO, "SET_INTERFACE %d\n", setup->wValue);
         StopEndpoints();
-        configured = true;
+        configured_ = true;
         status = dci_intf_->Control(setup, nullptr, 0, buffer, length, out_actual);
         if (status == ZX_OK) {
             StartEndpoints();
         } else {
-            configured = false;
+            configured_ = false;
         }
         return status;
     }
@@ -378,7 +379,7 @@ void Dwc2::StartEp0() {
     doeptsize0.set_xfersize(8 * 3);
     doeptsize0.WriteTo(mmio);
 
-//??    ep0_state = EP0_STATE_IDLE;
+//??    ep0_state_ = EP0_STATE_IDLE;
 
     DEPCTL::Get(16).ReadFrom(mmio).set_epena(1).WriteTo(mmio);
 }
@@ -396,7 +397,7 @@ zxlogf(LSPEW, "read %08x\n", dest[-1]);
 }
 
 bool Dwc2::WritePacket(uint8_t ep_num) {
-    dwc_endpoint_t* ep = &eps[ep_num];
+    auto* ep = &endpoints_[ep_num];
     auto* mmio = get_mmio();
 
     uint32_t len = ep->req_length - ep->req_offset;
@@ -471,7 +472,7 @@ printf("dwc_ep_queue_next_locked current_req %p req_int %p\n", ep->current_req, 
 
 void Dwc2::StartTransfer(uint8_t ep_num, uint32_t length) {
 zxlogf(LINFO, "Dwc2::StartTransfer ep_num %u length %u\n", ep_num, length);
-    dwc_endpoint_t* ep = &eps[ep_num];
+    auto* ep = &endpoints_[ep_num];
     auto* mmio = get_mmio();
     bool is_in = DWC_EP_IS_IN(ep_num);
 
@@ -547,8 +548,8 @@ void Dwc2::FlushFifo(uint32_t fifo_num) {
 void Dwc2::StartEndpoints() {
     zxlogf(TRACE, "Dwc2::StartEndpoints\n");
 
-    for (uint8_t ep_num = 1; ep_num < countof(eps); ep_num++) {
-        dwc_endpoint_t* ep = &eps[ep_num];
+    for (uint8_t ep_num = 1; ep_num < fbl::count_of(endpoints_); ep_num++) {
+        auto* ep = &endpoints_[ep_num];
         if (ep->enabled) {
             EnableEp(ep_num, true);
 
@@ -571,7 +572,7 @@ void Dwc2::StopEndpoints() {
     // Do something here
 #endif
 
-    for (uint8_t ep_num = 1; ep_num < countof(eps); ep_num++) {
+    for (uint8_t ep_num = 1; ep_num < fbl::count_of(endpoints_); ep_num++) {
         EndTransfers(ep_num, ZX_ERR_IO_NOT_PRESENT);
         SetStall(ep_num, false);
     }
@@ -601,7 +602,7 @@ void Dwc2::HandleEp0Status(bool is_in) {
 //zxlogf(LINFO, "HandleEp0Status is_in: %d\n", is_in);
 //     dwc_endpoint_t* ep = &dwc->eps[0];
 
-    ep0_state = EP0_STATE_STATUS;
+    ep0_state_ = EP0_STATE_STATUS;
 
     StartTransfer((is_in ? DWC_EP0_IN : DWC_EP0_OUT), 0);
 
@@ -610,9 +611,9 @@ void Dwc2::HandleEp0Status(bool is_in) {
 }
 
 void Dwc2::CompleteEp0() {
-     dwc_endpoint_t* ep = &eps[0];
+    auto* ep = &endpoints_[0];
 
-    if (ep0_state == EP0_STATE_STATUS) {
+    if (ep0_state_ == EP0_STATE_STATUS) {
 //zxlogf(LINFO, "CompleteEp0 EP0_STATE_STATUS\n");
         ep->req_offset = 0;
         ep->req_length = 0;
@@ -620,7 +621,7 @@ void Dwc2::CompleteEp0() {
 //    } else if ( ep->req_length == 0) {
 //zxlogf(LINFO, "CompleteEp0 ep->req_length == 0\n");
 //      dwc_otg_ep_start_transfer(ep);
-    } else if (ep0_state == EP0_STATE_DATA_IN) {
+    } else if (ep0_state_ == EP0_STATE_DATA_IN) {
 //zxlogf(LINFO, "CompleteEp0 EP0_STATE_DATA_IN\n");
        if (ep->req_offset >= ep->req_length) {
             HandleEp0Status(false);
@@ -663,7 +664,7 @@ void Dwc2::CompleteEp0() {
 }
 
 void Dwc2::HandleEp0Setup() {
-    auto* setup = &cur_setup;
+    auto* setup = &cur_setup_;
 
     if (!got_setup) {
 //zxlogf(LINFO, "no setup\n");
@@ -674,21 +675,21 @@ void Dwc2::HandleEp0Setup() {
 
     if (setup->bmRequestType & USB_DIR_IN) {
 //zxlogf(LINFO, "pcd_setup set EP0_STATE_DATA_IN\n");
-        ep0_state = EP0_STATE_DATA_IN;
+        ep0_state_ = EP0_STATE_DATA_IN;
     } else {
 //zxlogf(LINFO, "pcd_setup set EP0_STATE_DATA_OUT\n");
-        ep0_state = EP0_STATE_DATA_OUT;
+        ep0_state_ = EP0_STATE_DATA_OUT;
     }
 
-    if (setup->wLength > 0 && ep0_state == EP0_STATE_DATA_OUT) {
+    if (setup->wLength > 0 && ep0_state_ == EP0_STATE_DATA_OUT) {
 //zxlogf(LINFO, "queue read\n");
         // queue a read for the data phase
-        ep0_state = EP0_STATE_DATA_OUT;
+        ep0_state_ = EP0_STATE_DATA_OUT;
         StartTransfer(DWC_EP0_OUT, setup->wLength);
     } else {
         size_t actual = 0;
-        __UNUSED zx_status_t status = HandleSetup(setup, ep0_buffer,
-                                                  sizeof(ep0_buffer), &actual);
+        __UNUSED zx_status_t status = HandleSetup(setup, ep0_buffer_,
+                                                  sizeof(ep0_buffer_), &actual);
         //zxlogf(INFO, "HandleSetup returned %d actual %zu\n", status, actual);
 //            if (status != ZX_OK) {
 //                dwc3_cmd_ep_set_stall(dwc, EP0_OUT);
@@ -696,9 +697,9 @@ void Dwc2::HandleEp0Setup() {
 //                break;
 //            }
 
-        if (ep0_state == EP0_STATE_DATA_IN && setup->wLength > 0) {
+        if (ep0_state_ == EP0_STATE_DATA_IN && setup->wLength > 0) {
 //            zxlogf(LINFO, "queue a write for the data phase\n");
-            ep0_state = EP0_STATE_DATA_IN;
+            ep0_state_ = EP0_STATE_DATA_IN;
             StartTransfer(DWC_EP0_IN, static_cast<uint32_t>(actual));
         } else {
             CompleteEp0();
@@ -709,7 +710,7 @@ void Dwc2::HandleEp0Setup() {
 void Dwc2::HandleEp0() {
 //    zxlogf(LINFO, "Dwc2::HandleEp0\n");
 
-    switch (ep0_state) {
+    switch (ep0_state_) {
     case EP0_STATE_IDLE: {
 //zxlogf(LINFO, "dwc_handle_ep0 EP0_STATE_IDLE\n");
 //        req_flag->request_config = 0;
@@ -731,14 +732,14 @@ void Dwc2::HandleEp0() {
 //    zxlogf(LINFO, "dwc_handle_ep0 EP0_STATE_STATUS\n");
         CompleteEp0();
         /* OUT for next SETUP */
-        ep0_state = EP0_STATE_IDLE;
+        ep0_state_ = EP0_STATE_IDLE;
 //        ep0->stopped = 1;
 //        ep0->is_in = 0;
         break;
 
     case EP0_STATE_STALL:
     default:
-        zxlogf(LINFO, "EP0 state is %d, should not get here\n", ep0_state);
+        zxlogf(LINFO, "EP0 state is %d, should not get here\n", ep0_state_);
         break;
     }
 }
@@ -747,7 +748,7 @@ void Dwc2::EpComplete(uint8_t ep_num) {
     zxlogf(LINFO, "XXXXX Dwc2::EpComplete ep_num %u\n", ep_num);
 
     if (ep_num != 0) {
-        dwc_endpoint_t* ep = &eps[ep_num];
+        auto* ep = &endpoints_[ep_num];
         usb_request_t* req = ep->current_req;
 
         if (req) {
@@ -800,7 +801,7 @@ void Dwc2::EpComplete(uint8_t ep_num) {
 }
 
 void Dwc2::EndTransfers(uint8_t ep_num, zx_status_t reason) {
-    dwc_endpoint_t* ep = &eps[ep_num];
+    auto* ep = &endpoints_[ep_num];
 
     fbl::AutoLock lock(&ep->lock);
 
@@ -820,11 +821,11 @@ void Dwc2::EndTransfers(uint8_t ep_num, zx_status_t reason) {
 }
 
 zx_status_t Dwc2::SetStall(uint8_t ep_num, bool stall) {
-    if (ep_num >= countof(eps)) {
+    if (ep_num >= fbl::count_of(endpoints_)) {
         return ZX_ERR_INVALID_ARGS;
     }
 
-    dwc_endpoint_t* ep = &eps[ep_num];
+    auto* ep = &endpoints_[ep_num];
     fbl::AutoLock lock(&ep->lock);
 
     if (!ep->enabled) {
@@ -971,12 +972,12 @@ zx_status_t Dwc2::Init() {
     list_initialize(&queued_in_reqs);
 #endif
 
-    for (uint8_t i = 0; i < countof(eps); i++) {
-        dwc_endpoint_t* ep = &eps[i];
+    for (uint8_t i = 0; i < fbl::count_of(endpoints_); i++) {
+        auto* ep = &endpoints_[i];
         ep->ep_num = i;
         list_initialize(&ep->queued_reqs);
     }
-    eps[0].req_buffer = ep0_buffer;
+    endpoints_[0].req_buffer = ep0_buffer_;
 
     auto status = pdev_.MapMmio(0, &mmio_);
     if (status != ZX_OK) {
@@ -1107,13 +1108,13 @@ int Dwc2::IrqThread() {
 void Dwc2::UsbDciRequestQueue(usb_request_t* req, const usb_request_complete_t* cb) {
     zxlogf(INFO, "XXXXXXX Dwc2::UsbDciRequestQueue ep: 0x%02x length %zu\n", req->header.ep_address, req->header.length);
     uint8_t ep_num = DWC_ADDR_TO_INDEX(req->header.ep_address);
-    if (ep_num == 0 || ep_num >= countof(eps)) {
+    if (ep_num == 0 || ep_num >= fbl::count_of(endpoints_)) {
         zxlogf(ERROR, "dwc_request_queue: bad ep address 0x%02X\n", req->header.ep_address);
         usb_request_complete(req, ZX_ERR_INVALID_ARGS, 0, cb);
         return;
     }
 
-    dwc_endpoint_t* ep = &eps[ep_num];
+    auto* ep = &endpoints_[ep_num];
 
     // OUT transactions must have length > 0 and multiple of max packet size
     if (DWC_EP_IS_OUT(ep_num)) {
@@ -1137,7 +1138,7 @@ void Dwc2::UsbDciRequestQueue(usb_request_t* req, const usb_request_complete_t* 
     dwc_usb_req_internal_t* req_int = USB_REQ_TO_INTERNAL(req);
     list_add_tail(&ep->queued_reqs, &req_int->node);
 
-    if (configured) {
+    if (configured_) {
         QueueNextLocked(ep);
     } else {
         zxlogf(ERROR, "Dwc2::UsbDciRequestQueue not configured!\n");    
@@ -1175,7 +1176,7 @@ zxlogf(LINFO, "dwc_ep_config address %02x ep_num %d\n", ep_desc->bEndpointAddres
         return ZX_ERR_NOT_SUPPORTED;
     }
 
-    dwc_endpoint_t* ep = &eps[ep_num];
+    auto* ep = &endpoints_[ep_num];
 
     fbl::AutoLock lock(&ep->lock);
 
@@ -1198,7 +1199,7 @@ zxlogf(LINFO, "dwc_ep_config address %02x ep_num %d\n", ep_desc->bEndpointAddres
 
     EnableEp(ep_num, true);
 
-    if (configured) {
+    if (configured_) {
         QueueNextLocked(ep);
     }
 
@@ -1218,7 +1219,7 @@ zx_status_t Dwc2::UsbDciDisableEp(uint8_t ep_address) {
     }
 
     // TODO validate ep_num?
-    dwc_endpoint_t* ep = &eps[ep_num];
+    auto* ep = &endpoints_[ep_num];
 
     fbl::AutoLock lock(&ep->lock);
 
