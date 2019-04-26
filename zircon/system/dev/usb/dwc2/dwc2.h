@@ -38,18 +38,6 @@ namespace dwc2 {
 
 //#define SINGLE_EP_IN_QUEUE 1
 
-// Internal context for USB requests
-typedef struct {
-     // callback to the upper layer
-     usb_request_complete_t complete_cb;
-     // for queueing requests internally
-     list_node_t node;
-} dwc_usb_req_internal_t;
-
-#define USB_REQ_TO_INTERNAL(req)                                                                   \
-    ((dwc_usb_req_internal_t*)((uintptr_t)(req) + sizeof(usb_request_t)))
-#define INTERNAL_TO_USB_REQ(ctx) ((usb_request_t *)((uintptr_t)(ctx) - sizeof(usb_request_t)))
-
 class Dwc2;
 using Dwc2Type = ddk::Device<Dwc2, ddk::Unbindable>;
 
@@ -87,9 +75,15 @@ private:
         STALL,
     };
 
+    using Request = usb::UnownedRequest<void>;
+    using RequestQueue = usb::UnownedRequestQueue<void>;
+
     struct Endpoint {
-        list_node_t queued_reqs;    // requests waiting to be processed
-        usb_request_t* current_req; // request currently being processed
+        // Requests waiting to be processed.
+        RequestQueue queued_reqs __TA_GUARDED(lock);
+        // request currently being processed.
+        usb_request_t* current_req __TA_GUARDED(lock) = nullptr;
+
         uint8_t* req_buffer;
         uint32_t req_offset;
         uint32_t req_length;    
@@ -128,7 +122,7 @@ private:
     void EndTransfers(uint8_t ep_num, zx_status_t reason);
     zx_status_t SetStall(uint8_t ep_num, bool stall);
     void EnableEp(uint8_t ep_num, bool enable);
-    void QueueNextLocked(Endpoint* ep);
+    void EpQueueNextLocked(Endpoint* ep);
     void StartTransfer(uint8_t ep_num, uint32_t length);
 
     // Interrupts
@@ -143,11 +137,6 @@ private:
     zx_status_t HandleSetup(size_t* out_actual);
     void SetAddress(uint8_t address);
 
-
-
-    using Request = usb::UnownedRequest<void>;
-    using RequestQueue = usb::UnownedRequestQueue<void>;
-
     inline ddk::MmioBuffer* get_mmio() {
         return &*mmio_;
     }
@@ -155,8 +144,8 @@ private:
     Endpoint endpoints_[DWC_MAX_EPS];
 
 #if SINGLE_EP_IN_QUEUE
-    list_node_t queued_in_reqs;
-    usb_request_t* current_in_req;
+    RequestQueue queued_in_reqs_ __TA_GUARDED(lock);
+    usb_request_t* current_in_req_;
 #endif
 
     // Used for synchronizing global state

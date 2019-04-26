@@ -21,6 +21,7 @@ void Dwc2::HandleReset() {
 
     ep0_state_ = Ep0State::DISCONNECTED;
 
+	/* Clear the Remote Wakeup Signalling */
     DCTL::Get().ReadFrom(mmio).set_rmtwkupsig(1).WriteTo(mmio);
 
     for (int i = 0; i < MAX_EPS_CHANNELS; i++) {
@@ -188,7 +189,7 @@ printf("Dwc2::HandleInEpInterrupt\n");
 
         /* Transfer complete */
         if (diepint.xfercompl()) {
-if (ep_num > 0) zxlogf(LINFO, "dwc_handle_inepintr_irq xfercompl ep_num %u\n", ep_num);
+if (ep_num > 0) zxlogf(LINFO, "Dwc2::HandleInEpInterrupt xfercompl ep_num %u\n", ep_num);
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_xfercompl(1).WriteTo(mmio);
 //                regs->depin[ep_num].diepint.xfercompl = 1;
             /* Complete the transfer */
@@ -446,32 +447,32 @@ zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_
     }
 }
 
-void Dwc2::QueueNextLocked(Endpoint* ep) {
-    dwc_usb_req_internal_t* req_int = NULL;
+void Dwc2::EpQueueNextLocked(Endpoint* ep) {
+    std::optional<Request> req;
 
 #if SINGLE_EP_IN_QUEUE
     bool is_in = DWC_EP_IS_IN(ep->ep_num);
     if (is_in) {
-        if (dwc->current_in_req == NULL) {
-            req_int = list_remove_head_type(&dwc->queued_in_reqs, dwc_usb_req_internal_t, node);
+        if (dwc->current_in_req == nullptr) {
+            req = queued_in_reqs.pop();
         }
     } else
 #endif
     {
-        if (ep->current_req == NULL) {
-            req_int = list_remove_head_type(&ep->queued_reqs, dwc_usb_req_internal_t, node);
+        if (ep->current_req == nullptr) {
+            req = ep->queued_reqs.pop();
         }
     }
-printf("dwc_ep_queue_next_locked current_req %p req_int %p\n", ep->current_req, req_int);
+printf("dwc_ep_queue_next_locked current_req %p\n", ep->current_req);
 
-    if (req_int) {
-        usb_request_t* req = INTERNAL_TO_USB_REQ(req_int);
-        ep->current_req = req;
+    if (req.has_value()) {
+        auto* usb_req = req->take();
+        ep->current_req = usb_req;
         
-        usb_request_mmap(req, (void **)&ep->req_buffer);
-        ep->send_zlp = req->header.send_zlp && (req->header.length % ep->max_packet_size) == 0;
+        usb_request_mmap(usb_req, (void **)&ep->req_buffer);
+        ep->send_zlp = usb_req->header.send_zlp && (usb_req->header.length % ep->max_packet_size) == 0;
 
-        StartTransfer(ep->ep_num, static_cast<uint32_t>(req->header.length));
+        StartTransfer(ep->ep_num, static_cast<uint32_t>(usb_req->header.length));
     }
 }
 
@@ -559,7 +560,7 @@ void Dwc2::StartEndpoints() {
             EnableEp(ep_num, true);
 
             fbl::AutoLock lock(&ep->lock);
-            QueueNextLocked(ep);
+            EpQueueNextLocked(ep);
         }
     }
 }
@@ -719,24 +720,24 @@ zxlogf(LINFO, "Dwc2::HandleEp0\n");
 
     switch (ep0_state_) {
     case Ep0State::IDLE: {
-//zxlogf(LINFO, "dwc_handle_ep0 Ep0State::IDLE\n");
+zxlogf(LINFO, "Dwc2::HandleEp0 Ep0State::IDLE\n");
 //        req_flag->request_config = 0;
         HandleEp0Setup();
         break;
     }
     case Ep0State::DATA_IN:
-//    zxlogf(LINFO, "dwc_handle_ep0 Ep0State::DATA_IN\n");
+zxlogf(LINFO, "Dwc2::HandleEp0 Ep0State::DATA_IN\n");
 //        if (ep0->xfer_count < ep0->total_len)
 //            zxlogf(LINFO, "FIX ME!! dwc_otg_ep0_continue_transfer!\n");
 //        else
             CompleteEp0();
         break;
     case Ep0State::DATA_OUT:
-//    zxlogf(LINFO, "dwc_handle_ep0 Ep0State::DATA_OUT\n");
+zxlogf(LINFO, "Dwc2::HandleEp0 Ep0State::DATA_OUT\n");
         CompleteEp0();
         break;
     case Ep0State::STATUS:
-//    zxlogf(LINFO, "dwc_handle_ep0 Ep0State::STATUS\n");
+zxlogf(LINFO, "Dwc2::HandleEp0 Ep0State::STATUS\n");
         CompleteEp0();
         /* OUT for next SETUP */
         ep0_state_ = Ep0State::IDLE;
@@ -767,8 +768,9 @@ void Dwc2::EpComplete(uint8_t ep_num) {
 #endif
 
             ep->current_req = NULL;
-            dwc_usb_req_internal_t* req_int = USB_REQ_TO_INTERNAL(req);
-            usb_request_complete(req, ZX_OK, ep->req_offset, &req_int->complete_cb);
+            // Is This Safe??
+            Request request(req, sizeof(usb_request_t));
+            request.Complete(ZX_OK, ep->req_offset);
         }
 
         ep->req_buffer = NULL;
@@ -815,15 +817,15 @@ void Dwc2::EndTransfers(uint8_t ep_num, zx_status_t reason) {
     if (ep->current_req) {
 //        dwc_cmd_ep_end_transfer(dwc, ep_num);
 
-        dwc_usb_req_internal_t* req_int = USB_REQ_TO_INTERNAL(ep->current_req);
-        usb_request_complete(ep->current_req, reason, 0, &req_int->complete_cb);
+        // Is This Safe??
+        Request request(ep->current_req, sizeof(usb_request_t));
+        request.Complete(reason, 0);
         ep->current_req = NULL;
     }
 
-    dwc_usb_req_internal_t* req_int;
-    while ((req_int = list_remove_head_type(&ep->queued_reqs, dwc_usb_req_internal_t, node)) != NULL) {
-        usb_request_t* req = INTERNAL_TO_USB_REQ(req_int);
-        usb_request_complete(req, reason, 0, &req_int->complete_cb);
+
+    for (auto req = ep->queued_reqs.pop(); req; req = ep->queued_reqs.pop()) {
+        req->Complete(reason, 0);
     }
 }
 
@@ -982,7 +984,6 @@ zx_status_t Dwc2::Init() {
     for (uint8_t i = 0; i < fbl::count_of(endpoints_); i++) {
         auto* ep = &endpoints_[i];
         ep->ep_num = i;
-        list_initialize(&ep->queued_reqs);
     }
     endpoints_[0].req_buffer = ep0_buffer_;
 
@@ -1127,8 +1128,7 @@ void Dwc2::UsbDciRequestQueue(usb_request_t* req, const usb_request_complete_t* 
     if (DWC_EP_IS_OUT(ep_num)) {
         if (req->header.length == 0 || req->header.length % ep->max_packet_size != 0) {
             zxlogf(ERROR, "dwc_ep_queue: OUT transfers must be multiple of max packet size\n");
-            dwc_usb_req_internal_t* req_int = USB_REQ_TO_INTERNAL(req);
-            usb_request_complete(req, ZX_ERR_INVALID_ARGS, 0, &req_int->complete_cb);
+            usb_request_complete(req, ZX_ERR_INVALID_ARGS, 0, cb);
             return;
         }
     }
@@ -1137,19 +1137,18 @@ void Dwc2::UsbDciRequestQueue(usb_request_t* req, const usb_request_complete_t* 
 
     if (!ep->enabled) {
         zxlogf(ERROR, "dwc_ep_queue ep not enabled!\n");    
-        dwc_usb_req_internal_t* req_int = USB_REQ_TO_INTERNAL(req);
-        usb_request_complete(req, ZX_ERR_BAD_STATE, 0, &req_int->complete_cb);
+        usb_request_complete(req, ZX_ERR_BAD_STATE, 0, cb);
         return;
     }
 
-    dwc_usb_req_internal_t* req_int = USB_REQ_TO_INTERNAL(req);
-    list_add_tail(&ep->queued_reqs, &req_int->node);
-
-    if (configured_) {
-        QueueNextLocked(ep);
-    } else {
-        zxlogf(ERROR, "Dwc2::UsbDciRequestQueue not configured!\n");    
+    if (!configured_) {
+        zxlogf(ERROR, "dwc_ep_queue not configured!\n");
+        usb_request_complete(req, ZX_ERR_BAD_STATE, 0, cb);
+        return;
     }
+
+    ep->queued_reqs.push(Request(req, *cb, sizeof(usb_request_t)));
+    EpQueueNextLocked(ep);
 }
 
 zx_status_t Dwc2::UsbDciSetInterface(const usb_dci_interface_protocol_t* interface) {
@@ -1207,7 +1206,7 @@ zxlogf(LINFO, "dwc_ep_config address %02x ep_num %d\n", ep_desc->bEndpointAddres
     EnableEp(ep_num, true);
 
     if (configured_) {
-        QueueNextLocked(ep);
+        EpQueueNextLocked(ep);
     }
 
     return ZX_OK;
