@@ -174,7 +174,8 @@ break;
 void Dwc2::HandleInEpInterrupt() {
     auto* mmio = get_mmio();
 
-printf("dwc_handle_inepintr_irq\n");
+printf("Dwc2::HandleInEpInterrupt\n");
+
     for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
         uint32_t bit = 1 << ep_num;
         auto daint = DAINT::Get().ReadFrom(mmio);
@@ -236,7 +237,7 @@ printf("diepint.inepnakeff ep_num %u\n", ep_num);
 void Dwc2::HandleOutEpInterrupt() {
     auto* mmio = get_mmio();
 
-//zxlogf(LINFO, "dwc_handle_outepintr_irq\n");
+zxlogf(LINFO, "Dwc2::HandleOutEpInterrupt\n");
 
     uint8_t ep_num = 0;
 
@@ -309,9 +310,13 @@ void Dwc2::HandleTxFifoEmpty() {
     }
 }
 
-zx_status_t Dwc2::HandleSetup(usb_setup_t* setup, void* buffer, size_t length, size_t* out_actual) {
+zx_status_t Dwc2::HandleSetup(size_t* out_actual) {
     zx_status_t status;
     auto* ep = &endpoints_[0];
+
+    auto* setup = &cur_setup_;
+    auto* buffer = ep0_buffer_;
+    auto length = sizeof(ep0_buffer_);
 
     if (setup->bmRequestType == (USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_DEVICE)) {
         // handle some special setup requests in this driver
@@ -599,7 +604,7 @@ void Dwc2::EnableEp(uint8_t ep_num, bool enable) {
 }
 
 void Dwc2::HandleEp0Status(bool is_in) {
-//zxlogf(LINFO, "HandleEp0Status is_in: %d\n", is_in);
+zxlogf(LINFO, "HandleEp0Status is_in: %d\n", is_in);
 
     ep0_state_ = Ep0State::STATUS;
 
@@ -689,8 +694,7 @@ zxlogf(LINFO, "no setup\n");
         StartTransfer(DWC_EP0_OUT, setup->wLength);
     } else {
         size_t actual = 0;
-        __UNUSED zx_status_t status = HandleSetup(setup, ep0_buffer_,
-                                                  sizeof(ep0_buffer_), &actual);
+        __UNUSED zx_status_t status = HandleSetup(&actual);
         zxlogf(INFO, "HandleSetup returned %d actual %zu\n", status, actual);
 //            if (status != ZX_OK) {
 //                dwc3_cmd_ep_set_stall(dwc, EP0_OUT);
@@ -701,15 +705,17 @@ zxlogf(LINFO, "no setup\n");
         if (ep0_state_ == Ep0State::DATA_IN && setup->wLength > 0) {
 //            zxlogf(LINFO, "queue a write for the data phase\n");
             ep0_state_ = Ep0State::DATA_IN;
+printf("HandleEp0Setup call StartTransfer\n");
             StartTransfer(DWC_EP0_IN, static_cast<uint32_t>(actual));
         } else {
+printf("HandleEp0Setup call CompleteEp0\n");
             CompleteEp0();
         }
     }
 }
 
 void Dwc2::HandleEp0() {
-//    zxlogf(LINFO, "Dwc2::HandleEp0\n");
+zxlogf(LINFO, "Dwc2::HandleEp0\n");
 
     switch (ep0_state_) {
     case Ep0State::IDLE: {

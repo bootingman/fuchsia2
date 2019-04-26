@@ -140,7 +140,7 @@ private:
     void HandleOutEpInterrupt();
     void HandleTxFifoEmpty();
 
-    zx_status_t HandleSetup(usb_setup_t* setup, void* buffer, size_t length, size_t* out_actual);
+    zx_status_t HandleSetup(size_t* out_actual);
     void SetAddress(uint8_t address);
 
 
