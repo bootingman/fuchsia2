@@ -38,15 +38,6 @@ namespace dwc2 {
 
 //#define SINGLE_EP_IN_QUEUE 1
 
-typedef enum dwc_ep0_state {
-    EP0_STATE_DISCONNECTED,
-    EP0_STATE_IDLE,
-    EP0_STATE_DATA_OUT,
-    EP0_STATE_DATA_IN,
-    EP0_STATE_STATUS,
-    EP0_STATE_STALL,
-} dwc_ep0_state_t;
-
 // Internal context for USB requests
 typedef struct {
      // callback to the upper layer
@@ -58,28 +49,6 @@ typedef struct {
 #define USB_REQ_TO_INTERNAL(req)                                                                   \
     ((dwc_usb_req_internal_t*)((uintptr_t)(req) + sizeof(usb_request_t)))
 #define INTERNAL_TO_USB_REQ(ctx) ((usb_request_t *)((uintptr_t)(ctx) - sizeof(usb_request_t)))
-
-struct dwc_endpoint_t {
-    list_node_t queued_reqs;    // requests waiting to be processed
-    usb_request_t* current_req; // request currently being processed
-    uint8_t* req_buffer;
-    uint32_t req_offset;
-    uint32_t req_length;    
-
-    // Used for synchronizing endpoint state
-    // and ep specific hardware registers
-    // This should be acquired before dwc_usb_t.lock
-    // if acquiring both locks.
-    fbl::Mutex lock;
-
-    uint16_t max_packet_size;
-    uint8_t ep_num;
-    bool enabled;
-    uint8_t type;           // control, bulk, interrupt or isochronous
-    uint8_t interval;
-    bool send_zlp;
-    bool stalled;
-};
 
 class Dwc2;
 using Dwc2Type = ddk::Device<Dwc2, ddk::Unbindable>;
@@ -108,6 +77,40 @@ public:
      size_t UsbDciGetRequestSize();
      zx_status_t UsbDciCancelAll(uint8_t ep_address);
 
+private:
+    enum class Ep0State {
+        DISCONNECTED,
+        IDLE,
+        DATA_OUT,
+        DATA_IN,
+        STATUS,
+        STALL,
+    };
+
+    struct Endpoint {
+        list_node_t queued_reqs;    // requests waiting to be processed
+        usb_request_t* current_req; // request currently being processed
+        uint8_t* req_buffer;
+        uint32_t req_offset;
+        uint32_t req_length;    
+    
+        // Used for synchronizing endpoint state
+        // and ep specific hardware registers
+        // This should be acquired before dwc_usb_t.lock
+        // if acquiring both locks.
+        fbl::Mutex lock;
+    
+        uint16_t max_packet_size;
+        uint8_t ep_num;
+        bool enabled;
+        uint8_t type;           // control, bulk, interrupt or isochronous
+        uint8_t interval;
+        bool send_zlp;
+        bool stalled;
+    };
+
+    DISALLOW_COPY_ASSIGN_AND_MOVE(Dwc2);
+
     void FlushFifo(uint32_t fifo_num);
     zx_status_t InitController();
     zx_status_t Start();
@@ -125,7 +128,7 @@ public:
     void EndTransfers(uint8_t ep_num, zx_status_t reason);
     zx_status_t SetStall(uint8_t ep_num, bool stall);
     void EnableEp(uint8_t ep_num, bool enable);
-    void QueueNextLocked(dwc_endpoint_t* ep);
+    void QueueNextLocked(Endpoint* ep);
     void StartTransfer(uint8_t ep_num, uint32_t length);
 
     // Interrupts
@@ -140,8 +143,7 @@ public:
     zx_status_t HandleSetup(usb_setup_t* setup, void* buffer, size_t length, size_t* out_actual);
     void SetAddress(uint8_t address);
 
-private:
-    DISALLOW_COPY_ASSIGN_AND_MOVE(Dwc2);
+
 
     using Request = usb::UnownedRequest<void>;
     using RequestQueue = usb::UnownedRequestQueue<void>;
@@ -150,7 +152,7 @@ private:
         return &*mmio_;
     }
 
-    dwc_endpoint_t endpoints_[DWC_MAX_EPS];
+    Endpoint endpoints_[DWC_MAX_EPS];
 
 #if SINGLE_EP_IN_QUEUE
     list_node_t queued_in_reqs;
@@ -159,16 +161,16 @@ private:
 
     // Used for synchronizing global state
     // and non ep specific hardware registers.
-    // dwc_endpoint_t.lock should be acquired first
+    // Endpoint.lock should be acquired first
     // if acquiring both locks.
     fbl::Mutex lock_;
 
     bool configured_;
 
     usb_setup_t cur_setup_;    
-    dwc_ep0_state_t ep0_state_;
+    Ep0State ep0_state_;
     uint8_t ep0_buffer_[UINT16_MAX];
-    bool got_setup;
+    bool got_setup_; // Is this necessary?
 
 
 

@@ -19,7 +19,7 @@ void Dwc2::HandleReset() {
 
     zxlogf(LINFO, "\nRESET\n");
 
-    ep0_state_ = EP0_STATE_DISCONNECTED;
+    ep0_state_ = Ep0State::DISCONNECTED;
 
     DCTL::Get().ReadFrom(mmio).set_rmtwkupsig(1).WriteTo(mmio);
 
@@ -71,7 +71,7 @@ void Dwc2::HandleEnumDone() {
         astro_usb_do_usb_tuning(&dwc->astro_usb, false, false);
     }
 */
-    ep0_state_ = EP0_STATE_IDLE;
+    ep0_state_ = Ep0State::IDLE;
 
     endpoints_[0].max_packet_size = 64;
 
@@ -153,7 +153,7 @@ zxlogf(LINFO, "fifo_count %u > %u\n", fifo_count, ep->req_length - ep->req_offse
 zxlogf(LINFO, "SETUP bmRequestType: 0x%02x bRequest: %u wValue: %u wIndex: %u wLength: %u\n",
         cur_setup_.bmRequestType, cur_setup_.bRequest, cur_setup_.wValue, cur_setup_.wIndex,
         cur_setup_.wLength);
-       got_setup = true;
+       got_setup_ = true;
         break;
     }
 
@@ -379,7 +379,7 @@ void Dwc2::StartEp0() {
     doeptsize0.set_xfersize(8 * 3);
     doeptsize0.WriteTo(mmio);
 
-//??    ep0_state_ = EP0_STATE_IDLE;
+//??    ep0_state_ = Ep0State::IDLE;
 
     DEPCTL::Get(16).ReadFrom(mmio).set_epena(1).WriteTo(mmio);
 }
@@ -441,7 +441,7 @@ zxlogf(LINFO, "ep_num %d nptxqspcavail %u nptxfspcavail %u dwords %u\n", ep->ep_
     }
 }
 
-void Dwc2::QueueNextLocked(dwc_endpoint_t* ep) {
+void Dwc2::QueueNextLocked(Endpoint* ep) {
     dwc_usb_req_internal_t* req_int = NULL;
 
 #if SINGLE_EP_IN_QUEUE
@@ -600,9 +600,8 @@ void Dwc2::EnableEp(uint8_t ep_num, bool enable) {
 
 void Dwc2::HandleEp0Status(bool is_in) {
 //zxlogf(LINFO, "HandleEp0Status is_in: %d\n", is_in);
-//     dwc_endpoint_t* ep = &dwc->eps[0];
 
-    ep0_state_ = EP0_STATE_STATUS;
+    ep0_state_ = Ep0State::STATUS;
 
     StartTransfer((is_in ? DWC_EP0_IN : DWC_EP0_OUT), 0);
 
@@ -613,16 +612,16 @@ void Dwc2::HandleEp0Status(bool is_in) {
 void Dwc2::CompleteEp0() {
     auto* ep = &endpoints_[0];
 
-    if (ep0_state_ == EP0_STATE_STATUS) {
-//zxlogf(LINFO, "CompleteEp0 EP0_STATE_STATUS\n");
+    if (ep0_state_ == Ep0State::STATUS) {
+//zxlogf(LINFO, "CompleteEp0 Ep0State::STATUS\n");
         ep->req_offset = 0;
         ep->req_length = 0;
 // this interferes with zero length OUT
 //    } else if ( ep->req_length == 0) {
 //zxlogf(LINFO, "CompleteEp0 ep->req_length == 0\n");
 //      dwc_otg_ep_start_transfer(ep);
-    } else if (ep0_state_ == EP0_STATE_DATA_IN) {
-//zxlogf(LINFO, "CompleteEp0 EP0_STATE_DATA_IN\n");
+    } else if (ep0_state_ == Ep0State::DATA_IN) {
+//zxlogf(LINFO, "CompleteEp0 Ep0State::DATA_IN\n");
        if (ep->req_offset >= ep->req_length) {
             HandleEp0Status(false);
        }
@@ -666,25 +665,25 @@ void Dwc2::CompleteEp0() {
 void Dwc2::HandleEp0Setup() {
     auto* setup = &cur_setup_;
 
-    if (!got_setup) {
+    if (!got_setup_) {
 //zxlogf(LINFO, "no setup\n");
         return;
     }
-    got_setup = false;
+    got_setup_ = false;
 
 
     if (setup->bmRequestType & USB_DIR_IN) {
-//zxlogf(LINFO, "pcd_setup set EP0_STATE_DATA_IN\n");
-        ep0_state_ = EP0_STATE_DATA_IN;
+//zxlogf(LINFO, "pcd_setup set Ep0State::DATA_IN\n");
+        ep0_state_ = Ep0State::DATA_IN;
     } else {
-//zxlogf(LINFO, "pcd_setup set EP0_STATE_DATA_OUT\n");
-        ep0_state_ = EP0_STATE_DATA_OUT;
+//zxlogf(LINFO, "pcd_setup set Ep0State::DATA_OUT\n");
+        ep0_state_ = Ep0State::DATA_OUT;
     }
 
-    if (setup->wLength > 0 && ep0_state_ == EP0_STATE_DATA_OUT) {
+    if (setup->wLength > 0 && ep0_state_ == Ep0State::DATA_OUT) {
 //zxlogf(LINFO, "queue read\n");
         // queue a read for the data phase
-        ep0_state_ = EP0_STATE_DATA_OUT;
+        ep0_state_ = Ep0State::DATA_OUT;
         StartTransfer(DWC_EP0_OUT, setup->wLength);
     } else {
         size_t actual = 0;
@@ -697,9 +696,9 @@ void Dwc2::HandleEp0Setup() {
 //                break;
 //            }
 
-        if (ep0_state_ == EP0_STATE_DATA_IN && setup->wLength > 0) {
+        if (ep0_state_ == Ep0State::DATA_IN && setup->wLength > 0) {
 //            zxlogf(LINFO, "queue a write for the data phase\n");
-            ep0_state_ = EP0_STATE_DATA_IN;
+            ep0_state_ = Ep0State::DATA_IN;
             StartTransfer(DWC_EP0_IN, static_cast<uint32_t>(actual));
         } else {
             CompleteEp0();
@@ -711,35 +710,35 @@ void Dwc2::HandleEp0() {
 //    zxlogf(LINFO, "Dwc2::HandleEp0\n");
 
     switch (ep0_state_) {
-    case EP0_STATE_IDLE: {
-//zxlogf(LINFO, "dwc_handle_ep0 EP0_STATE_IDLE\n");
+    case Ep0State::IDLE: {
+//zxlogf(LINFO, "dwc_handle_ep0 Ep0State::IDLE\n");
 //        req_flag->request_config = 0;
         HandleEp0Setup();
         break;
     }
-    case EP0_STATE_DATA_IN:
-//    zxlogf(LINFO, "dwc_handle_ep0 EP0_STATE_DATA_IN\n");
+    case Ep0State::DATA_IN:
+//    zxlogf(LINFO, "dwc_handle_ep0 Ep0State::DATA_IN\n");
 //        if (ep0->xfer_count < ep0->total_len)
 //            zxlogf(LINFO, "FIX ME!! dwc_otg_ep0_continue_transfer!\n");
 //        else
             CompleteEp0();
         break;
-    case EP0_STATE_DATA_OUT:
-//    zxlogf(LINFO, "dwc_handle_ep0 EP0_STATE_DATA_OUT\n");
+    case Ep0State::DATA_OUT:
+//    zxlogf(LINFO, "dwc_handle_ep0 Ep0State::DATA_OUT\n");
         CompleteEp0();
         break;
-    case EP0_STATE_STATUS:
-//    zxlogf(LINFO, "dwc_handle_ep0 EP0_STATE_STATUS\n");
+    case Ep0State::STATUS:
+//    zxlogf(LINFO, "dwc_handle_ep0 Ep0State::STATUS\n");
         CompleteEp0();
         /* OUT for next SETUP */
-        ep0_state_ = EP0_STATE_IDLE;
+        ep0_state_ = Ep0State::IDLE;
 //        ep0->stopped = 1;
 //        ep0->is_in = 0;
         break;
 
-    case EP0_STATE_STALL:
+    case Ep0State::STALL:
     default:
-        zxlogf(LINFO, "EP0 state is %d, should not get here\n", ep0_state_);
+        zxlogf(LINFO, "EP0 state is %d, should not get here\n", static_cast<int>(ep0_state_));
         break;
     }
 }
@@ -1230,11 +1229,12 @@ zx_status_t Dwc2::UsbDciDisableEp(uint8_t ep_address) {
 }
 
 zx_status_t Dwc2::UsbDciEpSetStall(uint8_t ep_address) {
+    // TODO
     return ZX_OK;
 }
 
 zx_status_t Dwc2::UsbDciEpClearStall(uint8_t ep_address) {
-
+    // TODO
     return ZX_OK;
 }
 
