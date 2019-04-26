@@ -20,10 +20,6 @@ zxlogf(LSPEW, "read %08x\n", dest[-1]);
 }
 
 static void dwc_set_address(dwc_usb_t* dwc, uint8_t address) {
-    auto* mmio = dwc->mmio();
-
-zxlogf(LINFO, "dwc_set_address %u\n", address);
-    DCFG::Get().ReadFrom(mmio).set_devaddr(address).WriteTo(mmio);
 }
 
 static void dwc2_ep0_out_start(dwc_usb_t* dwc)  {

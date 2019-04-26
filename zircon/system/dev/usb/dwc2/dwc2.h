@@ -188,6 +188,9 @@ public:
     void HandleOutEpInterrupt();
     void HandleTxFifoEmpty();
 
+    zx_status_t HandleSetup(usb_setup_t* setup, void* buffer, size_t length, size_t* out_actual);
+    void SetAddress(uint8_t address);
+
 private:
     DISALLOW_COPY_ASSIGN_AND_MOVE(Dwc2);
 
