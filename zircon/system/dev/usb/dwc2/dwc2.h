@@ -177,10 +177,19 @@ public:
     zx_status_t InitController();
     zx_status_t Start();
     void StartEp0();
+    void ReadPacket(void* buffer, uint32_t length, uint8_t ep_num);
     bool WritePacket(uint8_t ep_num);
     void StartEndpoints();
     void StopEndpoints();
+    void HandleEp0();
+    void EpComplete(uint8_t ep_num);
+    void EndTransfers(uint8_t ep_num, zx_status_t reason);
+    zx_status_t SetStall(uint8_t ep_num, bool stall);
+    void EnableEp(uint8_t ep_num, bool enable);
+    void QueueNextLocked(dwc_endpoint_t* ep);
+    void StartTransfer(uint8_t ep_num, uint32_t length);
 
+    // Interrupts
     void HandleReset();
     void HandleSuspend();
     void HandleEnumDone();
