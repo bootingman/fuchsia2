@@ -113,6 +113,15 @@ void Dwc2::HandleEnumDone() {
 }
 
 void Dwc2::HandleRxStatusQueueLevel() {
+}
+
+void Dwc2::HandleInEpInterrupt() {
+}
+
+void Dwc2::HandleOutEpInterrupt() {
+}
+
+void Dwc2::HandleTxFifoEmpty() {
     bool need_more = false;
     auto* mmio = get_mmio();
 
@@ -129,15 +138,6 @@ void Dwc2::HandleRxStatusQueueLevel() {
     }
 }
 
-void Dwc2::HandleInEpInterrupt() {
-}
-
-void Dwc2::HandleOutEpInterrupt() {
-}
-
-void Dwc2::HandleTxFifoEmpty() {
-}
-
 zx_status_t Dwc2::HandleSetup(usb_setup_t* setup, void* buffer, size_t length, size_t* out_actual) {
     zx_status_t status;
     dwc_endpoint_t* ep = &eps[0];
@@ -152,11 +152,11 @@ zx_status_t Dwc2::HandleSetup(usb_setup_t* setup, void* buffer, size_t length, s
             return ZX_OK;
         case USB_REQ_SET_CONFIGURATION:
             zxlogf(INFO, "SET_CONFIGURATION %d\n", setup->wValue);
-            dwc_reset_configuration();
+            StopEndpoints();
                 configured = true;
-            status = usb_dci_interface_control(&dwc->dci_intf, setup, NULL, 0, buffer, length, out_actual);
+            status = dci_intf_->Control(setup, nullptr, 0, buffer, length, out_actual);
             if (status == ZX_OK && setup->wValue) {
-                dwc_start_eps();
+                StartEndpoints();
             } else {
                 configured = false;
             }
@@ -168,13 +168,13 @@ zx_status_t Dwc2::HandleSetup(usb_setup_t* setup, void* buffer, size_t length, s
     } else if (setup->bmRequestType == (USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_INTERFACE) &&
                setup->bRequest == USB_REQ_SET_INTERFACE) {
         zxlogf(INFO, "SET_INTERFACE %d\n", setup->wValue);
-        dwc_reset_configuration(dwc);
-        dwc->configured = true;
-        status = usb_dci_interface_control(&dwc->dci_intf, setup, nullptr, 0, buffer, length, out_actual);
+        StopEndpoints();
+        configured = true;
+        status = dci_intf_->Control(setup, nullptr, 0, buffer, length, out_actual);
         if (status == ZX_OK) {
-            dwc_start_eps(dwc);
+            StartEndpoints();
         } else {
-            dwc->configured = false;
+            configured = false;
         }
         return status;
     }

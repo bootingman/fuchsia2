@@ -92,57 +92,7 @@ static void dwc_ep0_complete_request(dwc_usb_t* dwc) {
 
 static zx_status_t dwc_handle_setup(dwc_usb_t* dwc, usb_setup_t* setup, void* buffer, size_t length,
                                      size_t* out_actual) {
-//zxlogf(LINFO, "dwc_handle_setup\n");
-    zx_status_t status;
-    dwc_endpoint_t* ep = &dwc->eps[0];
-
-    if (setup->bmRequestType == (USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_DEVICE)) {
-        // handle some special setup requests in this driver
-        switch (setup->bRequest) {
-        case USB_REQ_SET_ADDRESS:
-            zxlogf(INFO, "SET_ADDRESS %d\n", setup->wValue);
-            dwc_set_address(dwc, static_cast<uint8_t>(setup->wValue));
-            *out_actual = 0;
-            return ZX_OK;
-        case USB_REQ_SET_CONFIGURATION:
-            zxlogf(INFO, "SET_CONFIGURATION %d\n", setup->wValue);
-            dwc_reset_configuration(dwc);
-                dwc->configured = true;
-            status = usb_dci_interface_control(&dwc->dci_intf, setup, NULL, 0, buffer, length, out_actual);
-            if (status == ZX_OK && setup->wValue) {
-                dwc_start_eps(dwc);
-            } else {
-                dwc->configured = false;
-            }
-            return status;
-        default:
-            // fall through to usb_dci_interface_control()
-            break;
-        }
-    } else if (setup->bmRequestType == (USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_INTERFACE) &&
-               setup->bRequest == USB_REQ_SET_INTERFACE) {
-        zxlogf(INFO, "SET_INTERFACE %d\n", setup->wValue);
-        dwc_reset_configuration(dwc);
-        dwc->configured = true;
-        status = usb_dci_interface_control(&dwc->dci_intf, setup, NULL, 0, buffer, length, out_actual);
-        if (status == ZX_OK) {
-            dwc_start_eps(dwc);
-        } else {
-            dwc->configured = false;
-        }
-        return status;
-    }
-
-    if ((setup->bmRequestType & USB_DIR_MASK) == USB_DIR_OUT) {
-        status = usb_dci_interface_control(&dwc->dci_intf, setup, NULL, 0, buffer, length, out_actual);
-    } else {
-        status = usb_dci_interface_control(&dwc->dci_intf, setup, buffer, length, NULL, 0, out_actual);
-    }
-    if (status == ZX_OK) {
-        ep->req_offset = 0;
-        ep->req_length = static_cast<uint32_t>(*out_actual);
-    }
-    return status;
+return 0;
 }
 
 static void pcd_setup(dwc_usb_t* dwc) {

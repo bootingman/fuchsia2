@@ -173,12 +173,13 @@ public:
      size_t UsbDciGetRequestSize();
      zx_status_t UsbDciCancelAll(uint8_t ep_address);
 
-
     void FlushFifo(uint32_t fifo_num);
     zx_status_t InitController();
     zx_status_t Start();
     void StartEp0();
     bool WritePacket(uint8_t ep_num);
+    void StartEndpoints();
+    void StopEndpoints();
 
     void HandleReset();
     void HandleSuspend();
