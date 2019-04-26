@@ -333,7 +333,7 @@ zx_status_t Dwc2::HandleSetup(usb_setup_t* setup, void* buffer, size_t length, s
             }
             return status;
         default:
-            // fall through to usb_dci_interface_control()
+            // fall through to dci_intf_->Control()
             break;
         }
     } else if (setup->bmRequestType == (USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_INTERFACE) &&
@@ -350,7 +350,7 @@ zx_status_t Dwc2::HandleSetup(usb_setup_t* setup, void* buffer, size_t length, s
         return status;
     }
 
-    if ((setup->bmRequestType & USB_DIR_MASK) == USB_DIR_OUT) {
+    if ((setup->bmRequestType & USB_DIR_MASK) == USB_DIR_IN) {
         status = dci_intf_->Control(setup, nullptr, 0, buffer, length, out_actual);
     } else {
         status = dci_intf_->Control(setup, buffer, length, nullptr, 0, out_actual);
@@ -663,10 +663,12 @@ void Dwc2::CompleteEp0() {
 }
 
 void Dwc2::HandleEp0Setup() {
+zxlogf(INFO, "HandleEp0Setup\n");
+
     auto* setup = &cur_setup_;
 
     if (!got_setup_) {
-//zxlogf(LINFO, "no setup\n");
+zxlogf(LINFO, "no setup\n");
         return;
     }
     got_setup_ = false;
@@ -689,7 +691,7 @@ void Dwc2::HandleEp0Setup() {
         size_t actual = 0;
         __UNUSED zx_status_t status = HandleSetup(setup, ep0_buffer_,
                                                   sizeof(ep0_buffer_), &actual);
-        //zxlogf(INFO, "HandleSetup returned %d actual %zu\n", status, actual);
+        zxlogf(INFO, "HandleSetup returned %d actual %zu\n", status, actual);
 //            if (status != ZX_OK) {
 //                dwc3_cmd_ep_set_stall(dwc, EP0_OUT);
 //                dwc3_queue_setup_locked(dwc);
