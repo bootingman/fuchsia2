@@ -181,6 +181,10 @@ public:
     bool WritePacket(uint8_t ep_num);
     void StartEndpoints();
     void StopEndpoints();
+    void HandleEp0Setup();
+    void Ep0StartOut();
+    void HandleEp0Status(bool is_in);
+    void CompleteEp0();
     void HandleEp0();
     void EpComplete(uint8_t ep_num);
     void EndTransfers(uint8_t ep_num, zx_status_t reason);
