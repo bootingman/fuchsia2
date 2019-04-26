@@ -5,8 +5,13 @@
 #include <ddk/debug.h>
 #include <lib/mmio/mmio.h>
 #include <lib/zx/resource.h>
+#include <ddk/metadata.h>
 #include <ddk/platform-defs.h>
+#include <ddk/usb-peripheral-config.h>
 #include <hw/reg.h>
+#include <zircon/device/usb-peripheral.h>
+#include <zircon/hw/usb.h>
+#include <zircon/hw/usb/cdc.h>
 
 #include <soc/aml-common/aml-usb-phy.h>
 #include <soc/aml-s912/s912-hw.h>
@@ -313,6 +318,17 @@ printf("mpeg1: %08x, mpeg2: %08x usb: %08x\n", *mpeg1, *mpeg2, *usb);
 	usleep(500);
 }
 
+constexpr char kManufacturer[] = "Zircon";
+constexpr char kProduct[] = "CDC-Ethernet";
+constexpr char kSerial[] = "0123456789ABCDEF";
+
+using FunctionDescriptor = fuchsia_hardware_usb_peripheral_FunctionDescriptor;
+
+static pbus_metadata_t usb_metadata[] = {
+    {.type = DEVICE_METADATA_USB_CONFIG, .data_buffer = nullptr, .data_size = 0},
+};
+
+
 zx_status_t Vim::UsbInit() {
     zx_status_t status;
 /*
@@ -329,6 +345,28 @@ zx_status_t Vim::UsbInit() {
     xhci_dev.bti_count = countof(xhci_btis);
 */
 
+    constexpr size_t alignment = alignof(UsbConfig) > __STDCPP_DEFAULT_NEW_ALIGNMENT__
+                                     ? alignof(UsbConfig)
+                                     : __STDCPP_DEFAULT_NEW_ALIGNMENT__;
+    UsbConfig* config = reinterpret_cast<UsbConfig*>(
+        aligned_alloc(alignment, ROUNDUP(sizeof(UsbConfig) + sizeof(FunctionDescriptor), alignment)));
+    if (!config) {
+        return ZX_ERR_NO_MEMORY;
+    }
+    config->vid = GOOGLE_USB_VID;
+    config->pid = GOOGLE_USB_CDC_PID;
+    strcpy(config->manufacturer, kManufacturer);
+    strcpy(config->serial, kSerial);
+    strcpy(config->product, kProduct);
+    config->functions[0].interface_class = USB_CLASS_COMM;
+    config->functions[0].interface_protocol = 0;
+    config->functions[0].interface_subclass = USB_CDC_SUBCLASS_ETHERNET;
+    usb_metadata[0].data_size = sizeof(UsbConfig) + sizeof(FunctionDescriptor);
+    usb_metadata[0].data_buffer = config;
+// TODO: delete usb_config later
+//    usb_config_ = config;
+
+
     pbus_dev_t dwc2_dev = {};
     dwc2_dev.name = "dwc2";
     dwc2_dev.vid = PDEV_VID_GENERIC;
@@ -340,6 +378,8 @@ zx_status_t Vim::UsbInit() {
     dwc2_dev.irq_count = countof(dwc2_irqs);
     dwc2_dev.bti_list = dwc2_btis;
     dwc2_dev.bti_count = countof(dwc2_btis);
+    dwc2_dev.metadata_list = usb_metadata;
+    dwc2_dev.metadata_count = countof(usb_metadata);
 
     zx::bti bti;
 
