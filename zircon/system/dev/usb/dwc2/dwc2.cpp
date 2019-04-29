@@ -1042,14 +1042,17 @@ int Dwc2::IrqThread() {
         while (1) {
             auto gintsts = GINTSTS::Get().ReadFrom(mmio);
             auto gintmsk = GINTMSK::Get().ReadFrom(mmio);
+printf("gintsts %08x gintmsk %08x\n", gintsts.reg_value(), gintmsk.reg_value());
+
+            // acknowledge
+            gintsts.WriteTo(mmio);
+
             gintsts.set_reg_value(gintsts.reg_value() & gintmsk.reg_value());
 
             if (gintsts.reg_value() == 0) {
                 break;
             }
 
-            // acknowledge
-            gintsts.WriteTo(mmio);
 
             zxlogf(LINFO, "dwc_handle_irq:");
             if (gintsts.modemismatch()) zxlogf(LINFO, " modemismatch");
