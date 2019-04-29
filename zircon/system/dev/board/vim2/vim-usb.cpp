@@ -22,9 +22,170 @@
 #include "vim.h"
 
 namespace vim {
+
+#define PREI_USB_PHY_2_REG_BASE 0xd0078020
+#define PREI_USB_PHY_3_REG_BASE 0xd0078080
+
+typedef struct u2p_aml_regs {
+	volatile uint32_t u2p_r0;
+	volatile uint32_t u2p_r1;
+	volatile uint32_t u2p_r2;
+} u2p_aml_regs_t;
+
+typedef union u2p_r0 {
+	/** raw register data */
+	uint32_t d32;
+	/** register bits */
+	struct {
+		unsigned bypass_sel:1;
+		unsigned bypass_dm_en:1;
+		unsigned bypass_dp_en:1;
+		unsigned txbitstuffenh:1;
+		unsigned txbitstuffen:1;
+		unsigned dmpulldown:1;
+		unsigned dppulldown:1;
+		unsigned vbusvldextsel:1;
+		unsigned vbusvldext:1;
+		unsigned adp_prb_en:1;
+		unsigned adp_dischrg:1;
+		unsigned adp_chrg:1;
+		unsigned drvvbus:1;
+		unsigned idpullup:1;
+		unsigned loopbackenb:1;
+		unsigned otgdisable:1;
+		unsigned commononn:1;
+		unsigned fsel:3;
+		unsigned refclksel:2;
+		unsigned por:1;
+		unsigned vatestenb:2;
+		unsigned set_iddq:1;
+		unsigned ate_reset:1;
+		unsigned fsv_minus:1;
+		unsigned fsv_plus:1;
+		unsigned bypass_dm_data:1;
+		unsigned bypass_dp_data:1;
+		unsigned not_used:1;
+	} b;
+} u2p_r0_t;
+
+typedef struct usb_aml_regs {
+	volatile uint32_t usb_r0;
+	volatile uint32_t usb_r1;
+	volatile uint32_t usb_r2;
+	volatile uint32_t usb_r3;
+	volatile uint32_t usb_r4;
+	volatile uint32_t usb_r5;
+	volatile uint32_t usb_r6;
+} usb_aml_regs_t;
+
+typedef union usb_r0 {
+	/** raw register data */
+	uint32_t d32;
+	/** register bits */
+	struct {
+		unsigned p30_fsel:6;
+		unsigned p30_phy_reset:1;
+		unsigned p30_test_powerdown_hsp:1;
+		unsigned p30_test_powerdown_ssp:1;
+		unsigned p30_acjt_level:5;
+		unsigned p30_tx_vboost_lvl:3;
+		unsigned p30_lane0_tx2rx_loopbk:1;
+		unsigned p30_lane0_ext_pclk_req:1;
+		unsigned p30_pcs_rx_los_mask_val:10;
+		unsigned u2d_ss_scaledown_mode:2;
+		unsigned u2d_act:1;
+	} b;
+} usb_r0_t;
+
+typedef union usb_r4 {
+	/** raw register data */
+	uint32_t d32;
+	/** register bits */
+	struct {
+		unsigned p21_PORTRESET0:1;
+		unsigned p21_SLEEPM0:1;
+		unsigned mem_pd:2;
+		unsigned reserved4:28;
+	} b;
+} usb_r4_t;
+
+
+zx_status_t f_set_usb_phy_config() {
+	const int time_dly = 500;
+
+    zx::unowned_resource resource(get_root_resource());
+
+    std::optional<ddk::MmioBuffer> usb_phy;
+    auto status = ddk::MmioBuffer::Create(S912_USB_PHY_BASE, S912_USB_PHY_LENGTH, *resource,
+                                     ZX_CACHE_POLICY_UNCACHED_DEVICE,  &usb_phy);
+    if (status != ZX_OK) {
+        zxlogf(ERROR, "UsbInit io_buffer_init_physical failed %d\n", status);
+        return status;
+    }
+    std::optional<ddk::MmioBuffer> preset;
+    status = ddk::MmioBuffer::Create(S912_PRESET_BASE, S912_PRESET_LENGTH, *resource,
+                                     ZX_CACHE_POLICY_UNCACHED_DEVICE,  &preset);
+    if (status != ZX_OK) {
+        zxlogf(ERROR, "UsbInit io_buffer_init_physical failed %d\n", status);
+        return status;
+    }
+    std::optional<ddk::MmioBuffer> aobus;
+    status = ddk::MmioBuffer::Create(S912_AOBUS_BASE, S912_AOBUS_LENGTH, *resource,
+                                     ZX_CACHE_POLICY_UNCACHED_DEVICE,  &aobus);
+    if (status != ZX_OK) {
+        zxlogf(ERROR, "UsbInit io_buffer_init_physical failed %d\n", status);
+        return status;
+    }
+
+	volatile u2p_aml_regs_t * u2p_aml_regs = (u2p_aml_regs_t * )((uint8_t*)usb_phy->get() + (PREI_USB_PHY_2_REG_BASE - S912_USB_PHY_BASE));
+	volatile usb_aml_regs_t * usb_aml_regs = (usb_aml_regs_t * )((uint8_t*)usb_phy->get() + (PREI_USB_PHY_3_REG_BASE - S912_USB_PHY_BASE));
+
+	u2p_r0_t u2p_r0;
+	usb_r0_t usb_r0;
+	usb_r4_t usb_r4;
+
+    volatile uint32_t* P_RESET1_REGISTER       = (uint32_t *)((uint8_t*)preset->get() + 0x408);
+    volatile uint32_t* P_AO_RTC_ALT_CLK_CNTL0  = (uint32_t *)((uint8_t*)aobus->get() + (0x25 << 2));
+    volatile uint32_t* P_AO_RTI_PWR_CNTL_REG0  = (uint32_t *)((uint8_t*)aobus->get() + (0x04 << 2));
+
+printf("f_set_usb_phy_config 1 P_RESET1_REGISTER 0x%p\n", (void*)P_RESET1_REGISTER);
+	*P_RESET1_REGISTER = (1<<2);
+
+	*P_AO_RTC_ALT_CLK_CNTL0 |= (1<<31)|(1<<30);
+	*P_AO_RTI_PWR_CNTL_REG0 |= (4<<10);
+
+	u2p_r0.d32 = u2p_aml_regs->u2p_r0;
+//#if (defined  CONFIG_AML_MESON_GXTVBB)
+//	u2p_r0.b.fsel = 5;
+//#elif  (defined CONFIG_AML_MESON_GXL)
+	u2p_r0.b.fsel = 2;
+//#endif
+	u2p_r0.b.por = 1;
+	u2p_r0.b.dppulldown = 0;
+	u2p_r0.b.dmpulldown = 0;
+	u2p_aml_regs->u2p_r0 = u2p_r0.d32;
+
+	u2p_r0.d32 = u2p_aml_regs->u2p_r0;
+	u2p_r0.b.por = 0;
+	u2p_aml_regs->u2p_r0 = u2p_r0.d32;
+
+	usb_r0.d32 = usb_aml_regs->usb_r0;
+	usb_r0.b.u2d_act = 1;
+	usb_aml_regs->usb_r0 = usb_r0.d32;
+
+	usb_r4.d32 = usb_aml_regs->usb_r4;
+	usb_r4.b.p21_SLEEPM0 = 1;
+	usb_aml_regs->usb_r4 = usb_r4.d32;
+
+	usleep(time_dly);
+	return ZX_OK;
+}
+
+#if 0
 #define BIT_MASK(start, count) (((1 << (count)) - 1) << (start))
 #define SET_BITS(dest, start, count, value) \
     ((dest & ~BIT_MASK(start, count)) | (((value) << (start)) & BIT_MASK(start, count)))
+#endif
 
 /*
 static const pbus_mmio_t xhci_mmios[] = {
@@ -150,7 +311,6 @@ print_regs(regs);
 printf("AFTER\n");
 print_regs(regs);
 }
-#endif
 
 typedef struct u2p_aml_regs {
 	volatile uint32_t u2p_r0;
@@ -317,6 +477,7 @@ printf("mpeg1: %08x, mpeg2: %08x usb: %08x\n", *mpeg1, *mpeg2, *usb);
 
 	usleep(500);
 }
+#endif
 
 constexpr char kManufacturer[] = "Zircon";
 constexpr char kProduct[] = "CDC-Ethernet";
@@ -381,13 +542,12 @@ zx_status_t Vim::UsbInit() {
     dwc2_dev.metadata_list = usb_metadata;
     dwc2_dev.metadata_count = countof(usb_metadata);
 
-    zx::bti bti;
-
+#if 0
     std::optional<ddk::MmioBuffer> usb_phy;
     // Please do not use get_root_resource() in new code. See ZX-1467.
     zx::unowned_resource resource(get_root_resource());
     status = ddk::MmioBuffer::Create(S912_USB_PHY_BASE, S912_USB_PHY_LENGTH, *resource,
-                                     ZX_CACHE_POLICY_UNCACHED_DEVICE,  &usb_phy);
+                                                 ZX_CACHE_POLICY_UNCACHED_DEVICE,  &usb_phy);
     if (status != ZX_OK) {
         zxlogf(ERROR, "UsbInit io_buffer_init_physical failed %d\n", status);
         return status;
@@ -439,11 +599,13 @@ zx_status_t Vim::UsbInit() {
         return status;
     }
 */
+#endif
+
     if ((status = pbus_.DeviceAdd(&dwc2_dev)) != ZX_OK) {
         zxlogf(ERROR, "UsbInit could not add dwc2_dev: %d\n", status);
         return status;
     }
 
-    return ZX_OK;
+    return f_set_usb_phy_config();
 }
 } //namespace vim
