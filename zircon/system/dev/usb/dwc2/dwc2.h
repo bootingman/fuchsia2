@@ -161,9 +161,6 @@ private:
     uint8_t ep0_buffer_[UINT16_MAX];
     bool got_setup_ = false;
 
-
-    
-
     ddk::PDev pdev_;
     std::optional<ddk::UsbDciInterfaceProtocolClient> dci_intf_;
 

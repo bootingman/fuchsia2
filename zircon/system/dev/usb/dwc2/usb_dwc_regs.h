@@ -28,6 +28,42 @@
 #define DWC_REG_DATA_FIFO_START 0x1000
 #define DWC_REG_DATA_FIFO(regs, ep)	((volatile uint32_t*)((uint8_t*)regs + (ep + 1) * 0x1000))
 
+class GOTGCTL : public hwreg::RegisterBase<GOTGCTL, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(0, sesreqscs);
+    DEF_BIT(1, sesreq);
+    DEF_BIT(2, vbvalidoven);
+    DEF_BIT(3, vbvalidovval);
+    DEF_BIT(4, avalidoven);
+    DEF_BIT(5, avalidovval);
+    DEF_BIT(6, bvalidoven);
+    DEF_BIT(7, bvalidovval);
+    DEF_BIT(8, hstnegscs);
+    DEF_BIT(9, hnpreq);
+    DEF_BIT(10, hstsethnpen);
+    DEF_BIT(11, devhnpen);
+    DEF_BIT(16, conidsts);
+    DEF_BIT(17, dbnctime);
+    DEF_BIT(18, asesvld);
+    DEF_BIT(19, bsesvld);
+    DEF_BIT(20, otgver);
+    DEF_FIELD(26, 22, hburstlen);
+    DEF_BIT(27, chirpen);
+    static auto Get() { return hwreg::RegisterAddr<GOTGCTL>(0x0); }
+};
+
+class GOTGINT : public hwreg::RegisterBase<GOTGINT, uint32_t, hwreg::EnablePrinter> {
+public:
+    DEF_BIT(2, sesenddet);
+    DEF_BIT(8, sesreqsucstschng);
+    DEF_BIT(9, hstnegsucstschng);
+    DEF_BIT(17, hstnegdet);
+    DEF_BIT(18, adevtoutchng);
+    DEF_BIT(19, debdone);
+    DEF_BIT(20, mvic);
+    static auto Get() { return hwreg::RegisterAddr<GOTGINT>(0x4); }
+};
+
 class GAHBCFG : public hwreg::RegisterBase<GAHBCFG, uint32_t, hwreg::EnablePrinter> {
 public:
     DEF_BIT(0, glblintrmsk);

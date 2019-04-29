@@ -46,8 +46,18 @@ void Dwc2::HandleReset() {
     // EPO IN and OUT
     DAINT::Get().FromValue((1 < DWC_EP_IN_SHIFT) | (1 < DWC_EP_OUT_SHIFT)).WriteTo(mmio);
 
-    DOEPMSK::Get().FromValue(0).set_setup(1).set_xfercompl(1).set_ahberr(1).set_epdisabled(1).WriteTo(mmio);
-    DIEPMSK::Get().FromValue(0).set_xfercompl(1).set_timeout(1).set_ahberr(1).set_epdisabled(1).WriteTo(mmio);
+    DOEPMSK::Get().FromValue(0).
+        set_setup(1).
+        set_xfercompl(1).
+        set_ahberr(1).
+        set_epdisabled(1).
+        WriteTo(mmio);
+    DIEPMSK::Get().FromValue(0).
+        set_xfercompl(1).
+        set_timeout(1).
+        set_ahberr(1).
+        set_epdisabled(1).
+        WriteTo(mmio);
 
     /* Reset Device Address */
     DCFG::Get().ReadFrom(mmio).set_devaddr(0).WriteTo(mmio);
@@ -205,31 +215,35 @@ printf("diepint.nak ep_num %u\n", ep_num);
         }
         /* Endpoint disable  */
         if (diepint.epdisabled()) {
+printf("HandleInEpInterrupt diepint.epdisabled\n");
             /* Clear the bit in DIEPINTn for this interrupt */
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_epdisabled(1).WriteTo(mmio);
         }
         /* AHB Error */
         if (diepint.ahberr()) {
+printf("HandleInEpInterrupt diepint.ahberr\n");
             /* Clear the bit in DIEPINTn for this interrupt */
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_ahberr(1).WriteTo(mmio);
         }
         /* TimeOUT Handshake (non-ISOC IN EPs) */
         if (diepint.timeout()) {
 //                handle_in_ep_timeout_intr(ep_num);
-zxlogf(LINFO, "TODO handle_in_ep_timeout_intr\n");
+printf("HandleInEpInterrupt diepint.timeout\n");
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_timeout(1).WriteTo(mmio);
         }
         /** IN Token received with TxF Empty */
         if (diepint.intktxfemp()) {
-            DIEPINT::Get(ep_num).ReadFrom(mmio).set_intktxfemp(1).WriteTo(mmio);
+ printf("HandleInEpInterrupt diepint.intktxfemp\n");
+           DIEPINT::Get(ep_num).ReadFrom(mmio).set_intktxfemp(1).WriteTo(mmio);
         }
         /** IN Token Received with EP mismatch */
         if (diepint.intknepmis()) {
+ printf("HandleInEpInterrupt diepint.intknepmis\n");
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_intknepmis(1).WriteTo(mmio);
         }
         /** IN Endpoint NAK Effective */
         if (diepint.inepnakeff()) {
-printf("diepint.inepnakeff ep_num %u\n", ep_num);
+ printf("HandleInEpInterrupt diepint.inepnakeff\n");
             DIEPINT::Get(ep_num).ReadFrom(mmio).set_inepnakeff(1).WriteTo(mmio);
         }
     }
@@ -704,8 +718,6 @@ zxlogf(LINFO, "no setup\n");
 //            }
 
         if (ep0_state_ == Ep0State::DATA_IN && setup->wLength > 0) {
-//            zxlogf(LINFO, "queue a write for the data phase\n");
-            ep0_state_ = Ep0State::DATA_IN;
 printf("HandleEp0Setup call StartTransfer\n");
             StartTransfer(DWC_EP0_IN, static_cast<uint32_t>(actual));
         } else {
@@ -921,8 +933,9 @@ printf("did regs->gahbcfg.dmaenable\n");
     gintmsk.set_enumdone(1);
     gintmsk.set_inepintr(1);
     gintmsk.set_outepintr(1);
-//    gintmsk.set_sof_intr(1);
+    gintmsk.set_sof_intr(1);
     gintmsk.set_usbsuspend(1);
+    gintmsk.set_erlysuspend(1);
 
 
     gintmsk.set_ginnakeff(1);
@@ -931,16 +944,16 @@ printf("did regs->gahbcfg.dmaenable\n");
 
 /*
     gintmsk.set_modemismatch(1);
-    gintmsk.set_otgintr(1);
     gintmsk.set_conidstschng(1);
     gintmsk.set_wkupintr(1);
     gintmsk.set_disconnect(0);
-    gintmsk.set_sessreqintr(1);
 */
+    gintmsk.set_sessreqintr(1);
+    gintmsk.set_otgintr(1);
 
 //printf("ghwcfg1 %08x ghwcfg2 %08x ghwcfg3 %08x\n", regs->ghwcfg1, regs->ghwcfg2, regs->ghwcfg3);
 
-// do we need this? regs->gotgint = 0xFFFFFFF;
+    GOTGINT::Get().FromValue(0xFFFFFFF).WriteTo(mmio);
     GINTSTS::Get().FromValue(0xFFFFFFF).WriteTo(mmio);
 
 zxlogf(LINFO, "enabling interrupts %08x\n", gintmsk.reg_value());
@@ -1042,10 +1055,17 @@ int Dwc2::IrqThread() {
         while (1) {
             auto gintsts = GINTSTS::Get().ReadFrom(mmio);
             auto gintmsk = GINTMSK::Get().ReadFrom(mmio);
-printf("gintsts %08x gintmsk %08x\n", gintsts.reg_value(), gintmsk.reg_value());
+//printf("gintsts %08x gintmsk %08x\n", gintsts.reg_value(), gintmsk.reg_value());
+
+            if (gintsts.sof_intr()) {
+                gintsts.set_sof_intr(1);
+            }
+            
 
             // acknowledge
             gintsts.WriteTo(mmio);
+
+            gintsts.set_sof_intr(0);
 
             gintsts.set_reg_value(gintsts.reg_value() & gintmsk.reg_value());
 
@@ -1054,10 +1074,10 @@ printf("gintsts %08x gintmsk %08x\n", gintsts.reg_value(), gintmsk.reg_value());
             }
 
 
-            zxlogf(LINFO, "dwc_handle_irq:");
+            zxlogf(LINFO, "IRQ IRQ IRQ IRQ IRQ IRQ:");
             if (gintsts.modemismatch()) zxlogf(LINFO, " modemismatch");
-            if (gintsts.otgintr()) zxlogf(LINFO, " otgintr");
-            if (gintsts.sof_intr()) zxlogf(LINFO, " sof_intr");
+            if (gintsts.otgintr()) zxlogf(LINFO, " otgintr gotgint: %08x\n  ", GOTGINT::Get().ReadFrom(mmio).reg_value());
+//            if (gintsts.sof_intr()) zxlogf(LINFO, " sof_intr");
             if (gintsts.rxstsqlvl()) zxlogf(LINFO, " rxstsqlvl");
             if (gintsts.nptxfempty()) zxlogf(LINFO, " nptxfempty");
             if (gintsts.ginnakeff()) zxlogf(LINFO, " ginnakeff");
@@ -1088,6 +1108,12 @@ printf("gintsts %08x gintmsk %08x\n", gintsts.reg_value(), gintmsk.reg_value());
             if (gintsts.wkupintr()) zxlogf(LINFO, " wkupintr");
             zxlogf(LINFO, "\n");
 
+            if (gintsts.rxstsqlvl()) {
+                HandleRxStatusQueueLevel();
+            }
+            if (gintsts.nptxfempty()) {
+                HandleTxFifoEmpty();
+            }
             if (gintsts.usbreset()) {
                 HandleReset();
             }
@@ -1097,17 +1123,11 @@ printf("gintsts %08x gintmsk %08x\n", gintsts.reg_value(), gintmsk.reg_value());
             if (gintsts.enumdone()) {
                 HandleEnumDone();
             }
-            if (gintsts.rxstsqlvl()) {
-                HandleRxStatusQueueLevel();
-            }
             if (gintsts.inepintr()) {
                 HandleInEpInterrupt();
             }
             if (gintsts.outepintr()) {
                 HandleOutEpInterrupt();
-            }
-            if (gintsts.nptxfempty()) {
-                HandleTxFifoEmpty();
             }
         }
     }
