@@ -37,7 +37,7 @@ protected:
     }
 
 private:
-    std::unique_ptr<FakePciroot> pciroot_;
+    std::optional<FakePciroot> pciroot_;
     std::unique_ptr<ddk::PcirootProtocolClient> client_;
     FakeBus bus_;
     FakeUpstreamNode upstream_;

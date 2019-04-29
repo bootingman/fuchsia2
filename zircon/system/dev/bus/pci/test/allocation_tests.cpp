@@ -17,7 +17,7 @@ namespace pci {
 // allocations using PcirootProtocol are created and freed through
 // PciRootAllocation and PciRegionAllocation dtors.
 TEST(PciAllocationTest, BalancedAllocation) {
-    std::unique_ptr<FakePciroot> pciroot;
+    std::optional<FakePciroot> pciroot;
     ASSERT_EQ(ZX_OK, FakePciroot::Create(0, 0, &pciroot));
     ddk::PcirootProtocolClient client(pciroot->proto());
     PciRootAllocator root(client, PCI_ADDRESS_SPACE_MMIO, false);
@@ -37,7 +37,7 @@ TEST(PciAllocationTest, BalancedAllocation) {
 // Since text allocations lack a valid resource they should fail when
 // CreateVMObject is called
 TEST(PciAllocationTest, VmoCreationFailure) {
-    std::unique_ptr<FakePciroot> pciroot;
+    std::optional<FakePciroot> pciroot;
     ASSERT_EQ(ZX_OK, FakePciroot::Create(0, 0, &pciroot));
     ddk::PcirootProtocolClient client(pciroot->proto());
 

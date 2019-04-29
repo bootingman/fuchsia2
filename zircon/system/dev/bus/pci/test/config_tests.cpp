@@ -32,7 +32,7 @@ protected:
     void IntegrationTestImpl(Config* cfg1, Config* cfg2);
 
 private:
-    std::unique_ptr<FakePciroot> pciroot_;
+    std::optional<FakePciroot> pciroot_;
     std::unique_ptr<ddk::PcirootProtocolClient> client_;
 };
 

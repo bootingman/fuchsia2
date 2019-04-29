@@ -18,14 +18,13 @@
 class FakePciroot : public ddk::PcirootProtocol<FakePciroot> {
 public:
     // By default, pciroot won't populate an ecam unless it's called with Create().
-    static zx_status_t Create(uint8_t bus_start, uint8_t bus_end, std::unique_ptr<FakePciroot>* out) {
+    static zx_status_t Create(uint8_t bus_start, uint8_t bus_end, std::optional<FakePciroot>* out) {
         std::optional<FakeEcam> ecam;
         zx_status_t st = FakeEcam::Create(bus_start, bus_end, &ecam);
         if (st != ZX_OK) {
             return st;
         }
-
-        *out = std::unique_ptr<FakePciroot>(new FakePciroot(bus_start, bus_end, std::move(*ecam)));
+        *out = FakePciroot(bus_start, bus_end, std::move(ecam));
         return ZX_OK;
     }
 
@@ -40,7 +39,7 @@ public:
     uint8_t bus_start() { return bus_start_; }
     uint8_t bus_end() { return bus_end_; }
     int32_t allocation_cnt() { return allocation_cnt_; }
-    FakeEcam& ecam() { return ecam_; }
+    FakeEcam& ecam() { return *ecam_; }
 
     // Protocol methods.
     zx_status_t PcirootGetAuxdata(const char* args, void* out_data, size_t data_size,
@@ -62,7 +61,7 @@ public:
             return ZX_ERR_NOT_SUPPORTED;
         }
 
-        memcpy(value, &ecam_.get(*address).ext_config[offset], sizeof(*value));
+        memcpy(value, &ecam_->get(*address).ext_config[offset], sizeof(*value));
         return ZX_OK;
     }
     zx_status_t PcirootConfigRead16(const pci_bdf_t* address, uint16_t offset,
@@ -72,7 +71,7 @@ public:
             return ZX_ERR_NOT_SUPPORTED;
         }
 
-        memcpy(value, &ecam_.get(*address).ext_config[offset], sizeof(*value));
+        memcpy(value, &ecam_->get(*address).ext_config[offset], sizeof(*value));
         return ZX_OK;
     }
     zx_status_t PcirootConfigRead32(const pci_bdf_t* address, uint16_t offset,
@@ -81,7 +80,7 @@ public:
             return ZX_ERR_NOT_SUPPORTED;
         }
 
-        memcpy(value, &ecam_.get(*address).ext_config[offset], sizeof(*value));
+        memcpy(value, &ecam_->get(*address).ext_config[offset], sizeof(*value));
         return ZX_OK;
     }
     zx_status_t PcirootConfigWrite8(const pci_bdf_t* address, uint16_t offset,
@@ -89,7 +88,7 @@ public:
         if (address->bus_id < bus_start_ || address->bus_id > bus_end_) {
             return ZX_ERR_NOT_SUPPORTED;
         }
-        memcpy(&ecam_.get(*address).ext_config[offset], &value, sizeof(value));
+        memcpy(&ecam_->get(*address).ext_config[offset], &value, sizeof(value));
         return ZX_OK;
     }
     zx_status_t PcirootConfigWrite16(const pci_bdf_t* address, uint16_t offset,
@@ -97,7 +96,7 @@ public:
         if (address->bus_id < bus_start_ || address->bus_id > bus_end_) {
             return ZX_ERR_NOT_SUPPORTED;
         }
-        memcpy(&ecam_.get(*address).ext_config[offset], &value, sizeof(value));
+        memcpy(&ecam_->get(*address).ext_config[offset], &value, sizeof(value));
         return ZX_OK;
     }
     zx_status_t PcirootConfigWrite32(const pci_bdf_t* address, uint16_t offset,
@@ -105,7 +104,7 @@ public:
         if (address->bus_id < bus_start_ || address->bus_id > bus_end_) {
             return ZX_ERR_NOT_SUPPORTED;
         }
-        memcpy(&ecam_.get(*address).ext_config[offset], &value, sizeof(value));
+        memcpy(&ecam_->get(*address).ext_config[offset], &value, sizeof(value));
         return ZX_OK;
     }
     zx_status_t PcirootAllocMsiBlock(uint64_t requested_irqs, bool can_target_64bit,
@@ -131,14 +130,14 @@ public:
     }
 
 private:
-    FakePciroot(uint8_t bus_start, uint8_t bus_end, FakeEcam&& ecam)
+    FakePciroot(uint8_t bus_start, uint8_t bus_end, std::optional<FakeEcam> ecam)
         : bus_start_(bus_start), bus_end_(bus_end), proto_({&pciroot_protocol_ops_, this}),
           ecam_(std::move(ecam)) {}
 
     uint8_t bus_start_ = 0;
     uint8_t bus_end_ = 0;
     pciroot_protocol_t proto_;
-    FakeEcam ecam_;
+    std::optional<FakeEcam> ecam_;
     int32_t allocation_cnt_ = 0;
 };
 
