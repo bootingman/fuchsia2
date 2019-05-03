@@ -1,4 +1,4 @@
-// Copyright 2018 The Fuchsia Authors. All rights reserved.
+// Copyright 2019 The Fuchsia Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,9 +32,6 @@
 #include "usb_dwc_regs.h"
 
 namespace dwc2 {
-
-#define MMIO_INDEX  0
-#define IRQ_INDEX   0
 
 //#define SINGLE_EP_IN_QUEUE 1
 
@@ -90,7 +87,7 @@ private:
     
         // Used for synchronizing endpoint state
         // and ep specific hardware registers
-        // This should be acquired before dwc_usb_t.lock
+        // This should be acquired before Dwc2.lock_
         // if acquiring both locks.
         fbl::Mutex lock;
     

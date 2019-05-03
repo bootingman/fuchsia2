@@ -1,4 +1,4 @@
-// Copyright 2018 The Fuchsia Authors. All rights reserved.
+// Copyright 2019 The Fuchsia Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -467,8 +467,8 @@ void Dwc2::EpQueueNextLocked(Endpoint* ep) {
 #if SINGLE_EP_IN_QUEUE
     bool is_in = DWC_EP_IS_IN(ep->ep_num);
     if (is_in) {
-        if (dwc->current_in_req == nullptr) {
-            req = queued_in_reqs.pop();
+        if (current_in_req_ == nullptr) {
+            req = queued_in_reqs_.pop();
         }
     } else
 #endif
@@ -774,8 +774,8 @@ void Dwc2::EpComplete(uint8_t ep_num) {
         if (req) {
 #if SINGLE_EP_IN_QUEUE
         if (DWC_EP_IS_IN(ep->ep_num)) {
-            ZX_DEBUG_ASSERT(dwc->current_in_req == ep->current_req);
-            dwc->current_in_req = NULL;
+            ZX_DEBUG_ASSERT(current_in_req_ == ep->current_req);
+            current_in_req_ = nullptr;
         }
 #endif
 
@@ -990,10 +990,6 @@ zx_status_t Dwc2::Create(void* ctx, zx_device_t* parent) {
 }
 
 zx_status_t Dwc2::Init() {
-#if SINGLE_EP_IN_QUEUE
-    list_initialize(&queued_in_reqs);
-#endif
-
     for (uint8_t i = 0; i < fbl::count_of(endpoints_); i++) {
         auto* ep = &endpoints_[i];
         ep->ep_num = i;
