@@ -66,10 +66,13 @@ void Dwc2::HandleReset() {
 
     // TODO how to detect disconnect?
     dci_intf_->SetConnected(true);
+
+    GINTSTS::Get().FromValue(0).set_usbreset(1).WriteTo(mmio);
 }
 
 void Dwc2::HandleSuspend() {
     zxlogf(INFO, "Dwc2::HandleSuspend\n");
+    GINTSTS::Get().FromValue(0).set_usbsuspend(1).WriteTo(get_mmio());
 }
 
 void Dwc2::HandleEnumDone() {
@@ -122,6 +125,8 @@ void Dwc2::HandleEnumDone() {
 #endif
 
     dci_intf_->SetSpeed(USB_SPEED_HIGH);
+
+    GINTSTS::Get().FromValue(0).set_enumdone(1).WriteTo(mmio);
 }
 
 void Dwc2::HandleRxStatusQueueLevel() {
@@ -180,12 +185,17 @@ break;
     default:
         break;
     }
+
+    GINTSTS::Get().FromValue(0).set_rxstsqlvl(1).WriteTo(mmio);
 }
 
 void Dwc2::HandleInEpInterrupt() {
     auto* mmio = get_mmio();
 
 printf("Dwc2::HandleInEpInterrupt\n");
+
+    GINTSTS::Get().FromValue(0).set_inepintr(1).WriteTo(mmio);
+// Do DAINT here too?
 
     for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
         uint32_t bit = 1 << ep_num;
@@ -261,6 +271,7 @@ zxlogf(LINFO, "Dwc2::HandleOutEpInterrupt\n");
     ep_intr >>= DWC_EP_OUT_SHIFT;
 
     /* Clear the interrupt */
+    GINTSTS::Get().FromValue(0).set_outepintr(1).WriteTo(mmio);
     DAINT::Get().FromValue(DWC_EP_OUT_MASK).WriteTo(mmio);
 
     while (ep_intr) {
@@ -323,6 +334,8 @@ void Dwc2::HandleTxFifoEmpty() {
         zxlogf(LINFO, "turn off nptxfempty\n");
         GINTMSK::Get().ReadFrom(mmio).set_nptxfempty(0).WriteTo(mmio);
     }
+
+    GINTSTS::Get().FromValue(0).set_nptxfempty(1).WriteTo(mmio);
 }
 
 zx_status_t Dwc2::HandleSetup(size_t* out_actual) {
@@ -427,6 +440,24 @@ bool Dwc2::WritePacket(uint8_t ep_num) {
     uint32_t dwords = (len + 3) >> 2;
     uint8_t *req_buffer = &ep->req_buffer[ep->req_offset];
 
+if (len == 18) {
+usb_device_descriptor_t* desc = (usb_device_descriptor_t *)req_buffer;
+    printf("bLength %u\n", desc->bLength);
+    printf("bDescriptorType %u\n", desc->bDescriptorType);
+    printf("bcdUSB %x\n", desc->bcdUSB);
+    printf("bDeviceClass %u\n", desc->bDeviceClass);
+    printf("bDeviceSubClass %u\n", desc->bDeviceSubClass);
+    printf("bDeviceProtocol %u\n", desc->bDeviceProtocol);
+    printf("bMaxPacketSize0 %u\n", desc->bMaxPacketSize0);
+    printf("idVendor %x\n", desc->idVendor);
+    printf("idProduct %x\n", desc->idProduct);
+    printf("bcdDevice %u\n", desc->bcdDevice);
+    printf("iManufacturer %u\n", desc->iManufacturer);
+    printf("iProduct %u\n", desc->iProduct);
+    printf("iSerialNumber %u\n", desc->iSerialNumber);
+    printf("bNumConfigurations %u\n", desc->bNumConfigurations);
+}
+
     auto txstatus = GNPTXSTS::Get().ReadFrom(mmio);
 
     while  (ep->req_offset < ep->req_length && txstatus.nptxqspcavail() > 0 && txstatus.nptxfspcavail() > dwords) {
@@ -520,6 +551,11 @@ zxlogf(LINFO, "epnum %d is_in %d xfer_count %d xfer_len %d pktcnt %d xfersize %d
         ep_num, is_in, ep->req_offset, ep->req_length, deptsiz.pktcnt(), deptsiz.xfersize());
 
     deptsiz.WriteTo(mmio);
+
+    if (is_in) {
+        GINTSTS::Get().FromValue(0).set_nptxfempty(1).WriteTo(mmio);
+        GINTMSK::Get().ReadFrom(mmio).set_nptxfempty(1).WriteTo(mmio);
+    }
 
     /* EP enable */
     auto depctl = DEPCTL::Get(ep_num).ReadFrom(mmio);
@@ -935,11 +971,11 @@ printf("did regs->gahbcfg.dmaenable\n");
     gintmsk.set_outepintr(1);
     gintmsk.set_sof_intr(1);
     gintmsk.set_usbsuspend(1);
-    gintmsk.set_erlysuspend(1);
+//    gintmsk.set_erlysuspend(1);
 
 
-    gintmsk.set_ginnakeff(1);
-    gintmsk.set_goutnakeff(1);
+//    gintmsk.set_ginnakeff(1);
+//    gintmsk.set_goutnakeff(1);
 
 
 /*
@@ -948,8 +984,8 @@ printf("did regs->gahbcfg.dmaenable\n");
     gintmsk.set_wkupintr(1);
     gintmsk.set_disconnect(0);
 */
-    gintmsk.set_sessreqintr(1);
-    gintmsk.set_otgintr(1);
+//    gintmsk.set_sessreqintr(1);
+//    gintmsk.set_otgintr(1);
 
 //printf("ghwcfg1 %08x ghwcfg2 %08x ghwcfg3 %08x\n", regs->ghwcfg1, regs->ghwcfg2, regs->ghwcfg3);
 
@@ -1041,18 +1077,22 @@ void Dwc2::DdkRelease() {
 int Dwc2::IrqThread() {
     auto* mmio = get_mmio();
 
+    bool did_something = true;
     while (1) {
+if (did_something) zxlogf(LINFO, "wait: 0x%08X 0x%08X\n", GINTSTS::Get().ReadFrom(mmio).reg_value(), GINTMSK::Get().ReadFrom(mmio).reg_value());
+
         auto wait_res = irq_.wait(nullptr);
         if (wait_res != ZX_OK) {
             zxlogf(ERROR, "dwc_usb: irq wait failed, retcode = %d\n", wait_res);
         }
+did_something = false;
 
         //?? is while loop necessary?
         while (1) {
             auto gintsts = GINTSTS::Get().ReadFrom(mmio);
             auto gintmsk = GINTMSK::Get().ReadFrom(mmio);
 //printf("gintsts %08x gintmsk %08x\n", gintsts.reg_value(), gintmsk.reg_value());
-
+/*
             if (gintsts.sof_intr()) {
                 gintsts.set_sof_intr(1);
             }
@@ -1060,7 +1100,7 @@ int Dwc2::IrqThread() {
 
             // acknowledge
             gintsts.WriteTo(mmio);
-
+*/
             gintsts.set_sof_intr(0);
 
             gintsts.set_reg_value(gintsts.reg_value() & gintmsk.reg_value());
@@ -1068,9 +1108,10 @@ int Dwc2::IrqThread() {
             if (gintsts.reg_value() == 0) {
                 break;
             }
+            did_something = true;
 
+            zxlogf(LINFO, "IRQ IRQ IRQ IRQ IRQ IRQ 0x%08X 0x%08X:", gintsts.reg_value(), gintmsk.reg_value());
 
-            zxlogf(LINFO, "IRQ IRQ IRQ IRQ IRQ IRQ:");
             if (gintsts.modemismatch()) zxlogf(LINFO, " modemismatch");
             if (gintsts.otgintr()) zxlogf(LINFO, " otgintr gotgint: %08x\n  ", GOTGINT::Get().ReadFrom(mmio).reg_value());
 //            if (gintsts.sof_intr()) zxlogf(LINFO, " sof_intr");
@@ -1124,6 +1165,7 @@ int Dwc2::IrqThread() {
             }
             if (gintsts.outepintr()) {
                 HandleOutEpInterrupt();
+                printf("did HandleOutEpInterrupt\n");
             }
         }
     }
