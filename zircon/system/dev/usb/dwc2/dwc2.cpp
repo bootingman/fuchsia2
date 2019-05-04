@@ -12,6 +12,8 @@
 #include <fbl/algorithm.h>
 #include <usb/usb-request.h>
 
+//#define ACKNOWLEDE 1
+
 namespace dwc2 {
 
 void Dwc2::HandleReset() {
@@ -44,7 +46,7 @@ void Dwc2::HandleReset() {
     GRSTCTL::Get().ReadFrom(mmio).set_intknqflsh(1).WriteTo(mmio);
 
     // EPO IN and OUT
-    DAINT::Get().FromValue((1 < DWC_EP_IN_SHIFT) | (1 < DWC_EP_OUT_SHIFT)).WriteTo(mmio);
+    DAINTMSK::Get().FromValue((1 < DWC_EP_IN_SHIFT) | (1 < DWC_EP_OUT_SHIFT)).WriteTo(mmio);
 
     DOEPMSK::Get().FromValue(0).
         set_setup(1).
@@ -67,12 +69,16 @@ void Dwc2::HandleReset() {
     // TODO how to detect disconnect?
     dci_intf_->SetConnected(true);
 
-    GINTSTS::Get().FromValue(0).set_usbreset(1).WriteTo(mmio);
+#ifndef ACKNOWLEDE
+    GINTSTS::Get().FromValue(0).set_usbreset(1).set_resetdet(1).WriteTo(mmio);
+#endif
 }
 
 void Dwc2::HandleSuspend() {
     zxlogf(INFO, "Dwc2::HandleSuspend\n");
+#ifndef ACKNOWLEDE
     GINTSTS::Get().FromValue(0).set_usbsuspend(1).WriteTo(get_mmio());
+#endif
 }
 
 void Dwc2::HandleEnumDone() {
@@ -126,7 +132,9 @@ void Dwc2::HandleEnumDone() {
 
     dci_intf_->SetSpeed(USB_SPEED_HIGH);
 
+#ifndef ACKNOWLEDE
     GINTSTS::Get().FromValue(0).set_enumdone(1).WriteTo(mmio);
+#endif
 }
 
 void Dwc2::HandleRxStatusQueueLevel() {
@@ -134,6 +142,7 @@ void Dwc2::HandleRxStatusQueueLevel() {
     auto* regs = mmio->get();
 
 //why?    regs->gintmsk.rxstsqlvl = 0;
+    GINTMSK::Get().ReadFrom(mmio).set_rxstsqlvl(0).WriteTo(mmio);
 
     /* Get the Status from the top of the FIFO */
     auto grxstsp = GRXSTSP::Get().ReadFrom(mmio);
@@ -186,7 +195,12 @@ break;
         break;
     }
 
+#ifndef ACKNOWLEDE
     GINTSTS::Get().FromValue(0).set_rxstsqlvl(1).WriteTo(mmio);
+#endif
+
+    GINTMSK::Get().ReadFrom(mmio).set_rxstsqlvl(1).WriteTo(mmio);
+
 }
 
 void Dwc2::HandleInEpInterrupt() {
@@ -194,7 +208,9 @@ void Dwc2::HandleInEpInterrupt() {
 
 printf("Dwc2::HandleInEpInterrupt\n");
 
+#ifndef ACKNOWLEDE
     GINTSTS::Get().FromValue(0).set_inepintr(1).WriteTo(mmio);
+#endif
 // Do DAINT here too?
 
     for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
@@ -271,7 +287,9 @@ zxlogf(LINFO, "Dwc2::HandleOutEpInterrupt\n");
     ep_intr >>= DWC_EP_OUT_SHIFT;
 
     /* Clear the interrupt */
+#ifndef ACKNOWLEDE
     GINTSTS::Get().FromValue(0).set_outepintr(1).WriteTo(mmio);
+#endif
     DAINT::Get().FromValue(DWC_EP_OUT_MASK).WriteTo(mmio);
 
     while (ep_intr) {
@@ -323,19 +341,68 @@ void Dwc2::HandleTxFifoEmpty() {
     bool need_more = false;
     auto* mmio = get_mmio();
 
+printf("HandleTxFifoEmpty DAINT %08x DAINTMSK %08x\n", DAINT::Get().ReadFrom(mmio).reg_value(), DAINTMSK::Get().ReadFrom(mmio).reg_value());
+
     for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
+    
+
+        if (DEPCTL::Get(ep_num).ReadFrom(mmio).epena() == 0) {
+			continue;
+        }
+
+    auto* ep = &endpoints_[ep_num];
+
+//		flush_cpu_cache();
+
+		/* While there is space in the queue and space in the FIFO and
+		 * More data to tranfer, Write packets to the Tx FIFO */
+//		txstatus.d32 = dwc_read_reg32(DWC_REG_GNPTXSTS);
+		while  (/*txstatus.b.nptxqspcavail > 0 &&
+			txstatus.b.nptxfspcavail > dwords &&*/
+			ep->req_offset < ep->req_length) {
+				uint32_t retry = 1000000;
+
+				uint32_t len = ep->req_length - ep->req_offset;
+				if (len > ep->max_packet_size)
+					len = ep->max_packet_size;
+
+				uint32_t dwords = (len + 3) >> 2;
+
+				while (retry--) {
+				    auto txstatus = GNPTXSTS::Get().ReadFrom(mmio);
+					if (txstatus.nptxqspcavail() > 0 && txstatus.nptxfspcavail() > dwords)
+						break;
+//					else
+//						flush_cpu_cache();
+				}
+				if (0 == retry) {
+					printf("TxFIFO FULL: Can't trans data to HOST !\n");
+					break;
+				}
+				/* Write the FIFO */
+                if (WritePacket(ep_num)) {
+                    need_more = true;
+                }
+
+//				flush_cpu_cache();
+			}
+
+/*
         if (DAINTMSK::Get().ReadFrom(mmio).mask() & (1 << ep_num)) {
             if (WritePacket(ep_num)) {
                 need_more = true;
             }
         }
+*/
     }
     if (!need_more) {
         zxlogf(LINFO, "turn off nptxfempty\n");
         GINTMSK::Get().ReadFrom(mmio).set_nptxfempty(0).WriteTo(mmio);
     }
 
+#ifndef ACKNOWLEDE
     GINTSTS::Get().FromValue(0).set_nptxfempty(1).WriteTo(mmio);
+#endif
 }
 
 zx_status_t Dwc2::HandleSetup(size_t* out_actual) {
@@ -412,9 +479,7 @@ void Dwc2::StartEp0() {
     doeptsize0.set_xfersize(8 * 3);
     doeptsize0.WriteTo(mmio);
 
-//??    ep0_state_ = Ep0State::IDLE;
-
-    DEPCTL::Get(16).ReadFrom(mmio).set_epena(1).WriteTo(mmio);
+    DEPCTL::Get(16).FromValue(0).set_epena(1).WriteTo(mmio);
 }
 
 void Dwc2::ReadPacket(void* buffer, uint32_t length, uint8_t ep_num) {
@@ -440,23 +505,7 @@ bool Dwc2::WritePacket(uint8_t ep_num) {
     uint32_t dwords = (len + 3) >> 2;
     uint8_t *req_buffer = &ep->req_buffer[ep->req_offset];
 
-if (len == 18) {
-usb_device_descriptor_t* desc = (usb_device_descriptor_t *)req_buffer;
-    printf("bLength %u\n", desc->bLength);
-    printf("bDescriptorType %u\n", desc->bDescriptorType);
-    printf("bcdUSB %x\n", desc->bcdUSB);
-    printf("bDeviceClass %u\n", desc->bDeviceClass);
-    printf("bDeviceSubClass %u\n", desc->bDeviceSubClass);
-    printf("bDeviceProtocol %u\n", desc->bDeviceProtocol);
-    printf("bMaxPacketSize0 %u\n", desc->bMaxPacketSize0);
-    printf("idVendor %x\n", desc->idVendor);
-    printf("idProduct %x\n", desc->idProduct);
-    printf("bcdDevice %u\n", desc->bcdDevice);
-    printf("iManufacturer %u\n", desc->iManufacturer);
-    printf("iProduct %u\n", desc->iProduct);
-    printf("iSerialNumber %u\n", desc->iSerialNumber);
-    printf("bNumConfigurations %u\n", desc->bNumConfigurations);
-}
+printf("WritePacket %u\n", len);
 
     auto txstatus = GNPTXSTS::Get().ReadFrom(mmio);
 
@@ -563,9 +612,11 @@ zxlogf(LINFO, "epnum %d is_in %d xfer_count %d xfer_len %d pktcnt %d xfersize %d
     depctl.set_epena(1);
     depctl.WriteTo(mmio);
 
+/*???
     if (is_in) {
         WritePacket(ep_num);
     }
+*/
 }
 
 void Dwc2::FlushFifo(uint32_t fifo_num) {
@@ -621,7 +672,7 @@ void Dwc2::StopEndpoints() {
     {
         fbl::AutoLock lock(&lock_);
         // disable all endpoints except EP0_OUT and EP0_IN
-        DAINT::Get().FromValue(1).WriteTo(mmio);
+        DAINTMSK::Get().FromValue(1).WriteTo(mmio);
     }
 
 #if SINGLE_EP_IN_QUEUE
@@ -678,7 +729,10 @@ void Dwc2::CompleteEp0() {
 //      dwc_otg_ep_start_transfer(ep);
     } else if (ep0_state_ == Ep0State::DATA_IN) {
 //zxlogf(LINFO, "CompleteEp0 Ep0State::DATA_IN\n");
-       if (ep->req_offset >= ep->req_length) {
+
+
+//@@@@       if (ep->req_offset >= ep->req_length) {
+       if (ep->req_length == 0) {
             HandleEp0Status(false);
        }
     } else {
@@ -909,7 +963,7 @@ zx_status_t Dwc2::InitController() {
         usleep(1000);
     }
 
-    GRSTCTL::Get().ReadFrom(mmio).set_csftrst(1).WriteTo(mmio);
+    GRSTCTL::Get().FromValue(0).set_csftrst(1).WriteTo(mmio);
 
     bool done = false;
     for (int i = 0; i < 1000; i++) {
@@ -924,28 +978,35 @@ zx_status_t Dwc2::InitController() {
         return ZX_ERR_TIMED_OUT;
     }
 
+    usleep(10 * 1000);
+
     GUSBCFG::Get().ReadFrom(mmio).set_force_dev_mode(1).WriteTo(mmio);
-    GAHBCFG::Get().ReadFrom(mmio).set_dmaenable(0).WriteTo(mmio);
+    GAHBCFG::Get().FromValue(0).set_dmaenable(0).WriteTo(mmio);
 printf("did regs->gahbcfg.dmaenable\n");
 
 #if 0 // astro
     GUSBCFG::Get().ReadFrom(mmio).set_usbtrdtim(9).WriteTo(mmio);
 #else
-    GUSBCFG::Get().ReadFrom(mmio).set_usbtrdtim(5).WriteTo(mmio);
+//    GUSBCFG::Get().ReadFrom(mmio).set_usbtrdtim(5).WriteTo(mmio);
 #endif
 
     // ???
     DCTL::Get().ReadFrom(mmio).set_sftdiscon(1).WriteTo(mmio);
     DCTL::Get().ReadFrom(mmio).set_sftdiscon(0).WriteTo(mmio);
 
+
+printf("DWC_REG_GUSBCFG %08x\n", GUSBCFG::Get().ReadFrom(mmio).reg_value());
+printf("DWC_REG_GAHBCFG %08x\n", GAHBCFG::Get().ReadFrom(mmio).reg_value());
+printf("DWC_REG_DCTL %08x\n", DCTL::Get().ReadFrom(mmio).reg_value());
+
     // reset phy clock
-// needed?    regs->pcgcctl = 0;
+    PCGCCTL::Get().FromValue(0).WriteTo(mmio);
 
     // RX fifo size
     GRXFSIZ::Get().FromValue(0).set_size(256).WriteTo(mmio);
 
     // TX fifo size
-    GNPTXFSIZ::Get().FromValue(0).set_depth(256).set_startaddr(256).WriteTo(mmio);
+    GNPTXFSIZ::Get().FromValue(0).set_depth(512).set_startaddr(256).WriteTo(mmio);
 
     FlushFifo(0x10);
 
@@ -971,6 +1032,9 @@ printf("did regs->gahbcfg.dmaenable\n");
     gintmsk.set_outepintr(1);
     gintmsk.set_sof_intr(1);
     gintmsk.set_usbsuspend(1);
+
+    gintmsk.set_resetdet(1);
+
 //    gintmsk.set_erlysuspend(1);
 
 
@@ -1088,25 +1152,25 @@ if (did_something) zxlogf(LINFO, "wait: 0x%08X 0x%08X\n", GINTSTS::Get().ReadFro
 did_something = false;
 
         //?? is while loop necessary?
-        while (1) {
+        /*while (1)*/ {
             auto gintsts = GINTSTS::Get().ReadFrom(mmio);
             auto gintmsk = GINTMSK::Get().ReadFrom(mmio);
 //printf("gintsts %08x gintmsk %08x\n", gintsts.reg_value(), gintmsk.reg_value());
-/*
+
             if (gintsts.sof_intr()) {
-                gintsts.set_sof_intr(1);
+                GINTSTS::Get().FromValue(0).set_sof_intr(1).WriteTo(mmio);
             }
             
 
+#if ACKNOWLEDE
             // acknowledge
             gintsts.WriteTo(mmio);
-*/
-            gintsts.set_sof_intr(0);
-
+#endif
             gintsts.set_reg_value(gintsts.reg_value() & gintmsk.reg_value());
 
-            if (gintsts.reg_value() == 0) {
-                break;
+            if (gintsts.reg_value() == 0 || gintsts.reg_value() == 0x8) {
+//                break;
+continue;
             }
             did_something = true;
 
@@ -1114,7 +1178,7 @@ did_something = false;
 
             if (gintsts.modemismatch()) zxlogf(LINFO, " modemismatch");
             if (gintsts.otgintr()) zxlogf(LINFO, " otgintr gotgint: %08x\n  ", GOTGINT::Get().ReadFrom(mmio).reg_value());
-//            if (gintsts.sof_intr()) zxlogf(LINFO, " sof_intr");
+            if (gintsts.sof_intr()) zxlogf(LINFO, " sof_intr");
             if (gintsts.rxstsqlvl()) zxlogf(LINFO, " rxstsqlvl");
             if (gintsts.nptxfempty()) zxlogf(LINFO, " nptxfempty");
             if (gintsts.ginnakeff()) zxlogf(LINFO, " ginnakeff");
@@ -1151,7 +1215,7 @@ did_something = false;
             if (gintsts.nptxfempty()) {
                 HandleTxFifoEmpty();
             }
-            if (gintsts.usbreset()) {
+            if (gintsts.usbreset() || gintsts.resetdet()) {
                 HandleReset();
             }
             if (gintsts.usbsuspend()) {

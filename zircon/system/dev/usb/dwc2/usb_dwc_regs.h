@@ -396,3 +396,8 @@ public:
     DEF_FIELD(31, 0, mask);
     static auto Get() { return hwreg::RegisterAddr<DAINTMSK>(0x81C); }
 };
+
+class PCGCCTL : public hwreg::RegisterBase<PCGCCTL, uint32_t, hwreg::EnablePrinter> {
+public:
+    static auto Get() { return hwreg::RegisterAddr<PCGCCTL>(0xE00); }
+};
