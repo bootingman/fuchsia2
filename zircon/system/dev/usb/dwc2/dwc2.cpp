@@ -46,7 +46,7 @@ void Dwc2::HandleReset() {
     GRSTCTL::Get().ReadFrom(mmio).set_intknqflsh(1).WriteTo(mmio);
 
     // EPO IN and OUT
-    DAINTMSK::Get().FromValue((1 < DWC_EP_IN_SHIFT) | (1 < DWC_EP_OUT_SHIFT)).WriteTo(mmio);
+    DAINTMSK::Get().FromValue((1 << DWC_EP0_IN) | (1 << DWC_EP0_OUT)).WriteTo(mmio);
 
     DOEPMSK::Get().FromValue(0).
         set_setup(1).
@@ -284,8 +284,12 @@ zxlogf(LINFO, "Dwc2::HandleOutEpInterrupt\n");
     uint8_t ep_num = 0;
 
     /* Read in the device interrupt bits */
-    uint32_t ep_intr = DAINT::Get().ReadFrom(mmio).enable() & DWC_EP_OUT_MASK;
-    ep_intr >>= DWC_EP_OUT_SHIFT;
+    auto ep_bits = DAINT::Get().ReadFrom(mmio).reg_value();
+    auto ep_mask = DAINTMSK::Get().ReadFrom(mmio).reg_value();
+printf("DAINT 0x%08X DAINTMSK 0x%08X\n", ep_bits, ep_mask);
+    ep_bits &= ep_mask;
+    ep_bits &= DWC_EP_OUT_MASK;
+    ep_bits >>= DWC_EP_OUT_SHIFT;
 
     /* Clear the interrupt */
 #ifndef ACKNOWLEDGE
@@ -293,8 +297,8 @@ zxlogf(LINFO, "Dwc2::HandleOutEpInterrupt\n");
 #endif
     DAINT::Get().FromValue(DWC_EP_OUT_MASK).WriteTo(mmio);
 
-    while (ep_intr) {
-        if (ep_intr & 1) {
+    while (ep_bits) {
+        if (ep_bits & 1) {
             auto doepint = DOEPINT::Get(ep_num).ReadFrom(mmio);
             doepint.set_reg_value(doepint.reg_value() & DOEPMSK::Get().ReadFrom(mmio).reg_value());
 if (ep_num > 0) zxlogf(LINFO, "dwc_handle_outepintr_irq doepint.val %08x\n", doepint.reg_value());
@@ -334,7 +338,7 @@ zxlogf(LINFO, "dwc_handle_outepintr_irq ahberr\n");
             }
         }
         ep_num++;
-        ep_intr >>= 1;
+        ep_bits >>= 1;
     }
 }
 
@@ -673,7 +677,7 @@ void Dwc2::StopEndpoints() {
     {
         fbl::AutoLock lock(&lock_);
         // disable all endpoints except EP0_OUT and EP0_IN
-        DAINTMSK::Get().FromValue(1).WriteTo(mmio);
+        DAINTMSK::Get().FromValue((1 << DWC_EP0_IN) | (1 << DWC_EP0_OUT)).WriteTo(mmio);
     }
 
 #if SINGLE_EP_IN_QUEUE
@@ -697,13 +701,12 @@ void Dwc2::EnableEp(uint8_t ep_num, bool enable) {
     if (enable) {
         auto daint = DAINT::Get().ReadFrom(mmio).reg_value();
         daint |= bit;
-        mask &= ~bit;
         DAINT::Get().FromValue(daint).WriteTo(mmio);
-    } else {
         mask |= bit;
+    } else {
+        mask &= ~bit;
     }
     DAINTMSK::Get().FromValue(mask).WriteTo(mmio);
-
 }
 
 void Dwc2::HandleEp0Status(bool is_in) {
