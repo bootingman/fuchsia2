@@ -203,73 +203,76 @@ break;
 
 void Dwc2::HandleInEpInterrupt() {
     auto* mmio = get_mmio();
+    uint8_t ep_num = 0;
 
 printf("Dwc2::HandleInEpInterrupt\n");
+
+    uint32_t ep_bits = DAINT::Get().ReadFrom(mmio).reg_value();
+    ep_bits &= DAINTMSK::Get().ReadFrom(mmio).reg_value();
+    ep_bits &= DWC_EP_IN_MASK;
 
 #ifndef ACKNOWLEDGE
     GINTSTS::Get().FromValue(0).set_inepintr(1).WriteTo(mmio);
 #endif
-// Do DAINT here too?
+    DAINT::Get().FromValue(DWC_EP_IN_MASK).WriteTo(mmio);
 
-    for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
-        uint32_t bit = 1 << ep_num;
-        auto daint = DAINT::Get().ReadFrom(mmio);
-        if ((daint.enable() & bit) == 0) {
-            continue;
-        }
-        daint.set_enable(daint.enable() | bit).WriteTo(mmio);        
+    while (ep_bits) {
+        if (ep_bits & 1) {
+            auto diepint = DIEPINT::Get(ep_num).ReadFrom(mmio);
+            diepint.set_reg_value(diepint.reg_value() & DIEPMSK::Get().ReadFrom(mmio).reg_value());
 
-        auto diepint = DIEPINT::Get(ep_num).ReadFrom(mmio);
-
-        /* Transfer complete */
-        if (diepint.xfercompl()) {
-if (ep_num > 0) zxlogf(LINFO, "Dwc2::HandleInEpInterrupt xfercompl ep_num %u\n", ep_num);
-            DIEPINT::Get(ep_num).ReadFrom(mmio).set_xfercompl(1).WriteTo(mmio);
-//                regs->depin[ep_num].diepint.xfercompl = 1;
-            /* Complete the transfer */
-            if (0 == ep_num) {
-                HandleEp0();
-            } else {
-                EpComplete(ep_num);
-                if (diepint.nak()) {
-printf("diepint.nak ep_num %u\n", ep_num);
-                    DIEPINT::Get(ep_num).ReadFrom(mmio).set_nak(1).WriteTo(mmio);
+            /* Transfer complete */
+            if (diepint.xfercompl()) {
+    if (ep_num > 0) zxlogf(LINFO, "Dwc2::HandleInEpInterrupt xfercompl ep_num %u\n", ep_num);
+                DIEPINT::Get(ep_num).ReadFrom(mmio).set_xfercompl(1).WriteTo(mmio);
+    //                regs->depin[ep_num].diepint.xfercompl = 1;
+                /* Complete the transfer */
+                if (0 == ep_num) {
+                    HandleEp0();
+                } else {
+                    EpComplete(ep_num);
+                    if (diepint.nak()) {
+    printf("diepint.nak ep_num %u\n", ep_num);
+                        DIEPINT::Get(ep_num).ReadFrom(mmio).set_nak(1).WriteTo(mmio);
+                    }
                 }
             }
+            /* Endpoint disable  */
+            if (diepint.epdisabled()) {
+    printf("HandleInEpInterrupt diepint.epdisabled\n");
+                /* Clear the bit in DIEPINTn for this interrupt */
+                DIEPINT::Get(ep_num).ReadFrom(mmio).set_epdisabled(1).WriteTo(mmio);
+            }
+            /* AHB Error */
+            if (diepint.ahberr()) {
+    printf("HandleInEpInterrupt diepint.ahberr\n");
+                /* Clear the bit in DIEPINTn for this interrupt */
+                DIEPINT::Get(ep_num).ReadFrom(mmio).set_ahberr(1).WriteTo(mmio);
+            }
+            /* TimeOUT Handshake (non-ISOC IN EPs) */
+            if (diepint.timeout()) {
+    //                handle_in_ep_timeout_intr(ep_num);
+    printf("HandleInEpInterrupt diepint.timeout\n");
+                DIEPINT::Get(ep_num).ReadFrom(mmio).set_timeout(1).WriteTo(mmio);
+            }
+            /** IN Token received with TxF Empty */
+            if (diepint.intktxfemp()) {
+     printf("HandleInEpInterrupt diepint.intktxfemp\n");
+               DIEPINT::Get(ep_num).ReadFrom(mmio).set_intktxfemp(1).WriteTo(mmio);
+            }
+            /** IN Token Received with EP mismatch */
+            if (diepint.intknepmis()) {
+     printf("HandleInEpInterrupt diepint.intknepmis\n");
+                DIEPINT::Get(ep_num).ReadFrom(mmio).set_intknepmis(1).WriteTo(mmio);
+            }
+            /** IN Endpoint NAK Effective */
+            if (diepint.inepnakeff()) {
+     printf("HandleInEpInterrupt diepint.inepnakeff\n");
+                DIEPINT::Get(ep_num).ReadFrom(mmio).set_inepnakeff(1).WriteTo(mmio);
+            }
         }
-        /* Endpoint disable  */
-        if (diepint.epdisabled()) {
-printf("HandleInEpInterrupt diepint.epdisabled\n");
-            /* Clear the bit in DIEPINTn for this interrupt */
-            DIEPINT::Get(ep_num).ReadFrom(mmio).set_epdisabled(1).WriteTo(mmio);
-        }
-        /* AHB Error */
-        if (diepint.ahberr()) {
-printf("HandleInEpInterrupt diepint.ahberr\n");
-            /* Clear the bit in DIEPINTn for this interrupt */
-            DIEPINT::Get(ep_num).ReadFrom(mmio).set_ahberr(1).WriteTo(mmio);
-        }
-        /* TimeOUT Handshake (non-ISOC IN EPs) */
-        if (diepint.timeout()) {
-//                handle_in_ep_timeout_intr(ep_num);
-printf("HandleInEpInterrupt diepint.timeout\n");
-            DIEPINT::Get(ep_num).ReadFrom(mmio).set_timeout(1).WriteTo(mmio);
-        }
-        /** IN Token received with TxF Empty */
-        if (diepint.intktxfemp()) {
- printf("HandleInEpInterrupt diepint.intktxfemp\n");
-           DIEPINT::Get(ep_num).ReadFrom(mmio).set_intktxfemp(1).WriteTo(mmio);
-        }
-        /** IN Token Received with EP mismatch */
-        if (diepint.intknepmis()) {
- printf("HandleInEpInterrupt diepint.intknepmis\n");
-            DIEPINT::Get(ep_num).ReadFrom(mmio).set_intknepmis(1).WriteTo(mmio);
-        }
-        /** IN Endpoint NAK Effective */
-        if (diepint.inepnakeff()) {
- printf("HandleInEpInterrupt diepint.inepnakeff\n");
-            DIEPINT::Get(ep_num).ReadFrom(mmio).set_inepnakeff(1).WriteTo(mmio);
-        }
+        ep_num++;
+        ep_bits >>= 1;
     }
 }
 
