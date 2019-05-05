@@ -348,14 +348,12 @@ void Dwc2::HandleTxFifoEmpty() {
 
 printf("HandleTxFifoEmpty DAINT %08x DAINTMSK %08x\n", DAINT::Get().ReadFrom(mmio).reg_value(), DAINTMSK::Get().ReadFrom(mmio).reg_value());
 
-    for (uint8_t ep_num = 0; ep_num < MAX_EPS_CHANNELS; ep_num++) {
-    
-
+    for (uint8_t ep_num = DWC_EP0_IN; ep_num < MAX_EPS_CHANNELS; ep_num++) {
         if (DEPCTL::Get(ep_num).ReadFrom(mmio).epena() == 0) {
 			continue;
         }
 
-    auto* ep = &endpoints_[ep_num];
+        auto* ep = &endpoints_[ep_num];
 
 //		flush_cpu_cache();
 
@@ -412,7 +410,6 @@ printf("HandleTxFifoEmpty DAINT %08x DAINTMSK %08x\n", DAINT::Get().ReadFrom(mmi
 
 zx_status_t Dwc2::HandleSetup(size_t* out_actual) {
     zx_status_t status;
-    auto* ep = &endpoints_[0];
 
     auto* setup = &cur_setup_;
     auto* buffer = ep0_buffer_;
@@ -461,6 +458,7 @@ zx_status_t Dwc2::HandleSetup(size_t* out_actual) {
         status = dci_intf_->Control(setup, buffer, length, nullptr, 0, out_actual);
     }
     if (status == ZX_OK) {
+        auto* ep = &endpoints_[DWC_EP0_OUT];
         ep->req_offset = 0;
         ep->req_length = static_cast<uint32_t>(*out_actual);
     }
