@@ -5,7 +5,7 @@
 use {
     crate::RWHandle,
     fuchsia_zircon::{self as zx, AsHandleRef},
-    futures::{ready, task::Context, Future, Poll},
+    futures::{ready, task::Context, Future, Poll, Stream},
     std::{
         fmt,
         marker::{PhantomData, Unpin},
@@ -61,6 +61,23 @@ where
     /// Reads an entry from the fifo and registers this `Fifo` as
     /// needing a read on receiving a `zx::Status::SHOULD_WAIT`.
     fn read(&self, cx: &mut Context<'_>) -> Poll<Result<Option<R>, zx::Status>>;
+
+    /// foo
+    fn readn(
+        &self,
+        cx: &mut Context<'_>,
+        entries: &mut [R],
+    ) -> Poll<Result<Option<usize>, zx::Status>>;
+
+    /// foo
+    fn stream(&self) -> EntryStream<Self, R> {
+        EntryStream::new(self)
+    }
+
+    /// foo
+    fn buffered_stream(&self, buffer_depth: usize) -> BufferedEntryStream<Self, R> {
+        BufferedEntryStream::new(self, buffer_depth)
+    }
 }
 
 /// An I/O object representing a `Fifo`.
@@ -176,11 +193,43 @@ impl<R: FifoEntry, W: FifoEntry> Fifo<R, W> {
             }
         }
     }
+
+    /// foo
+    pub fn try_readn(
+        &self,
+        cx: &mut Context<'_>,
+        entries: &mut [R],
+    ) -> Poll<Result<Option<usize>, zx::Status>> {
+        let clear_closed = ready!(self.handle.poll_read(cx)?);
+        let elembuf = unsafe {
+            ::std::slice::from_raw_parts_mut(
+                entries.as_mut_ptr() as *mut u8,
+                ::std::mem::size_of::<R>() * entries.len(),
+            )
+        };
+
+        match self.as_ref().read(::std::mem::size_of::<R>(), elembuf) {
+            Err(zx::Status::SHOULD_WAIT) => {
+                self.handle.need_read(cx, clear_closed)?;
+                Poll::Pending
+            }
+            Err(zx::Status::PEER_CLOSED) => Poll::Ready(Ok(None)),
+            Err(e) => Poll::Ready(Err(e)),
+            Ok(count) => Poll::Ready(Ok(Some(count))),
+        }
+    }
 }
 
 impl<R: FifoEntry, W: FifoEntry> FifoReadable<R> for Fifo<R, W> {
     fn read(&self, cx: &mut Context<'_>) -> Poll<Result<Option<R>, zx::Status>> {
         self.try_read(cx)
+    }
+    fn readn(
+        &self,
+        cx: &mut Context<'_>,
+        entries: &mut [R],
+    ) -> Poll<Result<Option<usize>, zx::Status>> {
+        self.try_readn(cx, entries)
     }
 }
 
@@ -249,6 +298,92 @@ impl<'a, F: FifoReadable<R>, R: FifoEntry> Future for ReadEntry<'a, F, R> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.fifo.read(cx)
+    }
+}
+
+/// EntryStream represents the stream of reads from the fifo.
+pub struct EntryStream<'a, F: 'a, R: 'a> {
+    fifo: &'a F,
+    read_marker: PhantomData<R>,
+}
+
+impl<'a, F: FifoReadable<R>, R: FifoEntry> EntryStream<'a, F, R> {
+    /// Create a new EntryStream, which borrows the `FifoReadable` type
+    /// until the stream completes.
+    pub fn new(fifo: &'a F) -> EntryStream<F, R> {
+        EntryStream { fifo, read_marker: PhantomData }
+    }
+}
+
+impl<'a, F: FifoReadable<R>, R: FifoEntry> Stream for EntryStream<'a, F, R> {
+    type Item = Result<R, zx::Status>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.fifo.read(cx).map(|v| v.transpose())
+    }
+}
+
+/// foo
+pub struct BufferedEntryStream<'a, F: 'a, R: FifoEntry> {
+    fifo: &'a F,
+    buffer: Vec<R>,
+    index: usize,
+    items: usize,
+}
+
+impl<'a, F: 'a, R: FifoEntry> Unpin for BufferedEntryStream<'a, F, R> {}
+
+impl<'a, F: 'a, R: FifoEntry> Drop for BufferedEntryStream<'a, F, R> {
+    fn drop(&mut self) {
+        unsafe {
+            self.buffer.set_len(0);
+        }
+    }
+}
+
+impl<'a, F: FifoReadable<R>, R: FifoEntry> BufferedEntryStream<'a, F, R> {
+    /// foo
+    pub fn new(fifo: &'a F, buffer_depth: usize) -> BufferedEntryStream<'a, F, R> {
+        let mut buffer = Vec::with_capacity(buffer_depth);
+        unsafe {
+            buffer.set_len(buffer_depth);
+        }
+        BufferedEntryStream { fifo, buffer, index: 0, items: 0 }
+    }
+
+    fn pop_item(&mut self) -> Option<R> {
+        if self.index < self.items {
+            let ret = unsafe { self.buffer.as_ptr().add(self.index).read() };
+            self.index = self.index + 1;
+            Some(ret)
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, F: FifoReadable<R>, R: FifoEntry> Stream for BufferedEntryStream<'a, F, R> {
+    type Item = Result<R, zx::Status>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = &mut *self;
+        if let Some(item) = this.pop_item() {
+            return Poll::Ready(Some(Ok(item)));
+        }
+        // to get here the buffer must be fully empty
+        debug_assert_eq!(self.index, self.items);
+        self.fifo
+            .readn(cx, self.buffer.as_mut_slice())
+            .map_ok(|value| {
+                value.map(|count| {
+                    debug_assert_ne!(0, count);
+                    self.items = count;
+                    self.index = 0;
+                    // must succeed as count was not zero
+                    self.pop_item().unwrap()
+                })
+            })
+            .map(|r| r.transpose())
     }
 }
 
