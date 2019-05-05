@@ -12,7 +12,7 @@
 #include <fbl/algorithm.h>
 #include <usb/usb-request.h>
 
-//#define ACKNOWLEDE 1
+//#define ACKNOWLEDGE 1
 
 namespace dwc2 {
 
@@ -69,14 +69,14 @@ void Dwc2::HandleReset() {
     // TODO how to detect disconnect?
     dci_intf_->SetConnected(true);
 
-#ifndef ACKNOWLEDE
+#ifndef ACKNOWLEDGE
     GINTSTS::Get().FromValue(0).set_usbreset(1).set_resetdet(1).WriteTo(mmio);
 #endif
 }
 
 void Dwc2::HandleSuspend() {
     zxlogf(INFO, "Dwc2::HandleSuspend\n");
-#ifndef ACKNOWLEDE
+#ifndef ACKNOWLEDGE
     GINTSTS::Get().FromValue(0).set_usbsuspend(1).WriteTo(get_mmio());
 #endif
 }
@@ -132,7 +132,7 @@ void Dwc2::HandleEnumDone() {
 
     dci_intf_->SetSpeed(USB_SPEED_HIGH);
 
-#ifndef ACKNOWLEDE
+#ifndef ACKNOWLEDGE
     GINTSTS::Get().FromValue(0).set_enumdone(1).WriteTo(mmio);
 #endif
 }
@@ -141,7 +141,6 @@ void Dwc2::HandleRxStatusQueueLevel() {
     auto* mmio = get_mmio();
     auto* regs = mmio->get();
 
-//why?    regs->gintmsk.rxstsqlvl = 0;
     GINTMSK::Get().ReadFrom(mmio).set_rxstsqlvl(0).WriteTo(mmio);
 
     /* Get the Status from the top of the FIFO */
@@ -178,7 +177,7 @@ zxlogf(LINFO, "fifo_count %u > %u\n", fifo_count, ep->req_length - ep->req_offse
 zxlogf(LINFO, "SETUP bmRequestType: 0x%02x bRequest: %u wValue: %u wIndex: %u wLength: %u\n",
         cur_setup_.bmRequestType, cur_setup_.bRequest, cur_setup_.wValue, cur_setup_.wIndex,
         cur_setup_.wLength);
-       got_setup_ = true;
+        got_setup_ = true;
         break;
     }
 
@@ -195,12 +194,11 @@ break;
         break;
     }
 
-#ifndef ACKNOWLEDE
-    GINTSTS::Get().FromValue(0).set_rxstsqlvl(1).WriteTo(mmio);
-#endif
-
     GINTMSK::Get().ReadFrom(mmio).set_rxstsqlvl(1).WriteTo(mmio);
 
+#ifndef ACKNOWLEDGE
+    GINTSTS::Get().FromValue(0).set_rxstsqlvl(1).WriteTo(mmio);
+#endif
 }
 
 void Dwc2::HandleInEpInterrupt() {
@@ -208,7 +206,7 @@ void Dwc2::HandleInEpInterrupt() {
 
 printf("Dwc2::HandleInEpInterrupt\n");
 
-#ifndef ACKNOWLEDE
+#ifndef ACKNOWLEDGE
     GINTSTS::Get().FromValue(0).set_inepintr(1).WriteTo(mmio);
 #endif
 // Do DAINT here too?
@@ -287,7 +285,7 @@ zxlogf(LINFO, "Dwc2::HandleOutEpInterrupt\n");
     ep_intr >>= DWC_EP_OUT_SHIFT;
 
     /* Clear the interrupt */
-#ifndef ACKNOWLEDE
+#ifndef ACKNOWLEDGE
     GINTSTS::Get().FromValue(0).set_outepintr(1).WriteTo(mmio);
 #endif
     DAINT::Get().FromValue(DWC_EP_OUT_MASK).WriteTo(mmio);
@@ -400,7 +398,7 @@ printf("HandleTxFifoEmpty DAINT %08x DAINTMSK %08x\n", DAINT::Get().ReadFrom(mmi
         GINTMSK::Get().ReadFrom(mmio).set_nptxfempty(0).WriteTo(mmio);
     }
 
-#ifndef ACKNOWLEDE
+#ifndef ACKNOWLEDGE
     GINTSTS::Get().FromValue(0).set_nptxfempty(1).WriteTo(mmio);
 #endif
 }
@@ -621,7 +619,7 @@ zxlogf(LINFO, "epnum %d is_in %d xfer_count %d xfer_len %d pktcnt %d xfersize %d
 
 void Dwc2::FlushFifo(uint32_t fifo_num) {
     auto* mmio = get_mmio();
-    auto grstctl = GRSTCTL::Get().ReadFrom(mmio);
+    auto grstctl = GRSTCTL::Get().FromValue(0);
 
     grstctl.set_txfflsh(1);
     grstctl.set_txfnum(fifo_num);
@@ -647,7 +645,7 @@ void Dwc2::FlushFifo(uint32_t fifo_num) {
         grstctl.ReadFrom(mmio);
         if (++count > 10000)
             break;
-    } while (grstctl.txfflsh() == 1);
+    } while (grstctl.rxfflsh() == 1);
 
     zx_nanosleep(zx_deadline_after(ZX_USEC(1)));
 }
@@ -1162,7 +1160,7 @@ did_something = false;
             }
             
 
-#if ACKNOWLEDE
+#if ACKNOWLEDGE
             // acknowledge
             gintsts.WriteTo(mmio);
 #endif
