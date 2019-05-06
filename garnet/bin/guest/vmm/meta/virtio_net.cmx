@@ -5,7 +5,9 @@
     "sandbox": {
         "services": [
             "fuchsia.netstack.Netstack",
-            "fuchsia.tracelink.Registry"
+            "fuchsia.tracelink.Registry",
+            "fuchsia.logger.Log",
+            "fuchsia.logger.LogSink"
         ]
     }
 }

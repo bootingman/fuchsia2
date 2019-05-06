@@ -431,7 +431,7 @@ group("guest_runner") {
     "//garnet/bin/guest/vmm/device:virtio_console",
     "//garnet/bin/guest/vmm/device:virtio_gpu",
     "//garnet/bin/guest/vmm/device:virtio_input",
-    "//garnet/bin/guest/vmm/device:virtio_net",
+    "//garnet/bin/guest/vmm/device/virtio_net",
     "//garnet/bin/guest/vmm/device/virtio_rng",
     "//garnet/bin/guest/vmm/device:virtio_wl",
     "//garnet/packages/config:network",

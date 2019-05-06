@@ -129,6 +129,8 @@ class VirtioNetTest : public TestWithDevice,
       ASSERT_EQ(status, ZX_OK) << "Failed to set IO buffer";
     });
 
+    eth_device_->Start([](zx_status_t status) { ASSERT_EQ(ZX_OK, status); });
+
     // Configure device queues.
     VirtioQueueFake* queues[kNumQueues] = {&rx_queue_, &tx_queue_};
     for (size_t i = 0; i < kNumQueues; i++) {
@@ -138,7 +140,7 @@ class VirtioNetTest : public TestWithDevice,
                            [] {});
     }
 
-    eth_device_->Start([](zx_status_t status) { ASSERT_EQ(ZX_OK, status); });
+    net_->Ready(0, []{});
   }
 
   fuchsia::guest::device::VirtioNetPtr net_;
