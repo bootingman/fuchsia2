@@ -200,11 +200,11 @@ public:
     DEF_FIELD(3, 0, epnum);
     DEF_FIELD(14, 4, bcnt);
     DEF_FIELD(16, 15, dpid);
+#define DWC_DSTS_GOUT_NAK		0x1	// Global OUT NAK
 #define DWC_STS_DATA_UPDT		0x2	// OUT Data Packet
 #define DWC_STS_XFER_COMP		0x3	// OUT Data Transfer Complete
-#define DWC_DSTS_GOUT_NAK		0x1	// Global OUT NAK
 #define DWC_DSTS_SETUP_COMP		0x4	// Setup Phase Complete
-#define DWC_DSTS_SETUP_UPDT 0x6	// SETUP Packet
+#define DWC_DSTS_SETUP_UPDT     0x6	// SETUP Packet
     DEF_FIELD(20, 17, pktsts);
     DEF_FIELD(24, 21, fn);
     static auto Get() { return hwreg::RegisterAddr<GRXSTSP>(0x20); }
@@ -304,7 +304,7 @@ public:
     DEF_FIELD(6, 0, xfersize);
     DEF_FIELD(20, 19, pktcnt);
     DEF_FIELD(30, 29, supcnt);
-    static auto Get() { return hwreg::RegisterAddr<DEPTSIZ0>(0xB10); }
+    static auto Get(unsigned i) { return hwreg::RegisterAddr<DEPTSIZ0>(0x910 + 0x20 * i); }
 };
 
 class DCFG : public hwreg::RegisterBase<DCFG, uint32_t, hwreg::EnablePrinter> {
