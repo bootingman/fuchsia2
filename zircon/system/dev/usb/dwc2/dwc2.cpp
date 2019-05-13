@@ -24,7 +24,7 @@ void Dwc2::HandleReset() {
     ep0_state_ = Ep0State::DISCONNECTED;
 
 	/* Clear the Remote Wakeup Signalling */
-    DCTL::Get().ReadFrom(mmio).set_rmtwkupsig(1).WriteTo(mmio);
+    DCTL::Get().ReadFrom(mmio).set_rmtwkupsig(0).WriteTo(mmio);
 
     for (int i = 0; i < MAX_EPS_CHANNELS; i++) {
         auto diepctl = DEPCTL::Get(i).ReadFrom(mmio);
